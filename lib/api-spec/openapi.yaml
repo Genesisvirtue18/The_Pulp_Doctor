@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: Public website, appointments, referrals, and protected clinic administration.
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: public
+    description: Public clinic information and patient workflows
+  - name: admin
+    description: Protected administrative workflows
 paths:
   /healthz:
     get:
@@ -24,6 +28,571 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /locations:
+    get:
+      operationId: listLocations
+      tags: [public]
+      summary: List clinic locations and published weekly hours
+      responses:
+        "200":
+          description: Clinic locations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClinicLocation"
+  /availability:
+    get:
+      operationId: getAvailability
+      tags: [public]
+      summary: Get published bookable slots for a clinic and local date
+      parameters:
+        - name: locationId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+      responses:
+        "200":
+          description: Available and unavailable time slots
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityResponse"
+  /appointments:
+    post:
+      operationId: createAppointment
+      tags: [public]
+      summary: Reserve an online appointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentInput"
+      responses:
+        "201":
+          description: Appointment created after a successful database reservation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentConfirmation"
+        "409":
+          description: Slot is no longer available
+        "503":
+          description: Booking service is not configured
+  /appointments/{appointmentId}/cancel:
+    post:
+      operationId: cancelAppointment
+      tags: [public]
+      summary: Cancel an appointment with its private management token
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentCancelInput"
+      responses:
+        "200":
+          description: Appointment cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentSummary"
+        "403":
+          description: Invalid management token
+        "404":
+          description: Appointment not found
+  /appointments/{appointmentId}/reschedule:
+    post:
+      operationId: rescheduleAppointment
+      tags: [public]
+      summary: Reschedule an appointment with its private management token
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentRescheduleInput"
+      responses:
+        "200":
+          description: Appointment rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppointmentSummary"
+        "409":
+          description: Requested slot is no longer available
+        "403":
+          description: Invalid management token
+  /referral-uploads/request-url:
+    post:
+      operationId: requestReferralUpload
+      tags: [public]
+      summary: Request a short-lived private upload URL for a referral image
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReferralUploadInput"
+      responses:
+        "201":
+          description: Short-lived upload authorization
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralUploadResponse"
+        "503":
+          description: Private file storage is not configured
+  /referrals:
+    post:
+      operationId: createReferral
+      tags: [public]
+      summary: Submit a dentist-to-specialist referral
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReferralInput"
+      responses:
+        "201":
+          description: Referral recorded and assigned a reference number
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralConfirmation"
+        "503":
+          description: Referral service is not configured
+  /admin/login:
+    post:
+      operationId: adminLogin
+      tags: [admin]
+      summary: Sign in an existing administrator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminLoginInput"
+      responses:
+        "200":
+          description: Authenticated administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSession"
+        "401":
+          description: Invalid sign-in details
+  /admin/session:
+    get:
+      operationId: getAdminSession
+      tags: [admin]
+      summary: Get the current authenticated administrator
+      responses:
+        "200":
+          description: Current administrator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSession"
+        "401":
+          description: Not signed in
+  /admin/logout:
+    post:
+      operationId: adminLogout
+      tags: [admin]
+      summary: End the current administrator session
+      responses:
+        "204":
+          description: Session ended
+  /admin/dashboard:
+    get:
+      operationId: getAdminDashboard
+      tags: [admin]
+      summary: Get a compact clinic operations overview
+      responses:
+        "200":
+          description: Counts and upcoming activity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDashboard"
+        "401":
+          description: Not signed in
+  /admin/notifications:
+    get:
+      operationId: listAdminNotifications
+      tags: [admin]
+      summary: List recent email delivery states without exposing message content
+      responses:
+        "200":
+          description: Recent notification delivery states
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminNotification"
+        "401":
+          description: Not signed in
+  /admin/notifications/{notificationId}/retry:
+    post:
+      operationId: retryAdminNotification
+      tags: [admin]
+      summary: Safely retry a failed notification
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated notification delivery state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminNotification"
+        "401":
+          description: Not signed in
+        "409":
+          description: Notification is not eligible for retry
+  /admin/appointments:
+    get:
+      operationId: listAdminAppointments
+      tags: [admin]
+      summary: Search appointments for authorized clinic staff
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/AppointmentStatus"
+        - name: source
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/BookingSource"
+      responses:
+        "200":
+          description: Matching appointments
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminAppointment"
+        "401":
+          description: Not signed in
+    post:
+      operationId: createPhoneAppointment
+      tags: [admin]
+      summary: Reserve an appointment taken by phone
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PhoneAppointmentInput"
+      responses:
+        "201":
+          description: Phone appointment reserved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAppointment"
+        "409":
+          description: Slot is no longer available
+        "401":
+          description: Not signed in
+  /admin/appointments/{appointmentId}/cancel:
+    post:
+      operationId: cancelAdminAppointment
+      tags: [admin]
+      summary: Cancel an appointment after an explicit confirmation
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminCancelInput"
+      responses:
+        "200":
+          description: Appointment cancelled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAppointment"
+        "401":
+          description: Not signed in
+  /admin/appointments/{appointmentId}/reschedule:
+    post:
+      operationId: rescheduleAdminAppointment
+      tags: [admin]
+      summary: Reschedule an appointment after an explicit confirmation
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminRescheduleInput"
+      responses:
+        "200":
+          description: Appointment rescheduled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAppointment"
+        "409":
+          description: Requested slot is no longer available
+        "401":
+          description: Not signed in
+  /admin/referrals:
+    get:
+      operationId: listAdminReferrals
+      tags: [admin]
+      summary: List submitted referrals for authorized clinic staff
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ReferralStatus"
+      responses:
+        "200":
+          description: Referrals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminReferral"
+        "401":
+          description: Not signed in
+  /admin/referrals/{referralId}/status:
+    patch:
+      operationId: updateReferralStatus
+      tags: [admin]
+      summary: Update a referral status and internal note
+      parameters:
+        - name: referralId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReferralStatusInput"
+      responses:
+        "200":
+          description: Updated referral
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminReferral"
+        "401":
+          description: Not signed in
+  /admin/referrals/{referralId}/attachments/{uploadId}/access-url:
+    post:
+      operationId: requestReferralAttachmentAccessUrl
+      tags: [admin]
+      summary: Request a short-lived private read URL for an authorized referral attachment
+      parameters:
+        - name: referralId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: uploadId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Short-lived authorized read URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralAttachmentAccess"
+        "401":
+          description: Not signed in
+        "404":
+          description: Attachment not found
+  /admin/schedules:
+    get:
+      operationId: listAdminSchedules
+      tags: [admin]
+      summary: List editable clinic schedules
+      responses:
+        "200":
+          description: Clinic schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminSchedule"
+        "401":
+          description: Not signed in
+  /admin/locations/{locationId}:
+    put:
+      operationId: updateAdminLocation
+      tags: [admin]
+      summary: Update clinic location details
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicLocationInput"
+      responses:
+        "200":
+          description: Updated clinic location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicLocation"
+        "401":
+          description: Not signed in
+  /admin/availability-overrides:
+    get:
+      operationId: listAdminAvailabilityOverrides
+      tags: [admin]
+      summary: List configured holidays and date-specific availability
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        - name: locationId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Date-specific overrides
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AvailabilityOverride"
+        "401":
+          description: Not signed in
+    post:
+      operationId: createAdminAvailabilityOverride
+      tags: [admin]
+      summary: Publish emergency or extra availability or block a date or slot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityOverrideInput"
+      responses:
+        "201":
+          description: Availability override created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailabilityOverride"
+        "401":
+          description: Not signed in
+  /admin/schedules/{locationId}:
+    put:
+      operationId: updateAdminSchedule
+      tags: [admin]
+      summary: Update one clinic's weekly schedule
+      parameters:
+        - name: locationId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ScheduleInput"
+      responses:
+        "200":
+          description: Updated schedule
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSchedule"
+        "401":
+          description: Not signed in
 components:
   schemas:
     HealthStatus:
@@ -33,4 +602,376 @@ components:
           type: string
       required:
         - status
+    NotificationStatus:
+      type: string
+      enum: [sent, failed, not_configured]
+    ClinicLocation:
+      type: object
+      required: [id, name, clinicName, address, mapsUrl, phone, weeklyHours]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        clinicName: { type: string }
+        address: { type: string }
+        mapsUrl: { type: string, format: uri }
+        phone: { type: ["string", "null"] }
+        weeklyHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyHours"
+    ClinicLocationInput:
+      type: object
+      required: [name, clinicName, address, mapsUrl, phone]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        clinicName: { type: string, minLength: 2, maxLength: 160 }
+        address: { type: string, minLength: 8, maxLength: 400 }
+        mapsUrl: { type: string, format: uri }
+        phone: { type: ["string", "null"], maxLength: 24 }
+    WeeklyHours:
+      type: object
+      required: [day, opensAt, closesAt]
+      properties:
+        day: { type: integer, minimum: 0, maximum: 6 }
+        opensAt: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+        closesAt: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+    Slot:
+      type: object
+      required: [id, startsAt, endsAt, label, available, emergency]
+      properties:
+        id: { type: string }
+        startsAt: { type: string, format: date-time }
+        endsAt: { type: string, format: date-time }
+        label: { type: string }
+        available: { type: boolean }
+        emergency: { type: boolean }
+    AvailabilityResponse:
+      type: object
+      required: [locationId, date, timezone, bookingEnabled, slots]
+      properties:
+        locationId: { type: string }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        timezone: { type: string, const: Asia/Kolkata }
+        bookingEnabled: { type: boolean }
+        unavailableReason: { type: ["string", "null"] }
+        slots:
+          type: array
+          items:
+            $ref: "#/components/schemas/Slot"
+    AppointmentStatus:
+      type: string
+      enum: [pending, confirmed, cancelled, completed]
+    BookingSource:
+      type: string
+      enum: [online, phone]
+    AppointmentInput:
+      type: object
+      required: [locationId, date, slotId, patientName, phone, email, appointmentType]
+      properties:
+        locationId: { type: string, minLength: 1 }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        slotId: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+        patientName: { type: string, minLength: 2, maxLength: 120 }
+        phone: { type: string, minLength: 8, maxLength: 24 }
+        email: { type: string, format: email }
+        appointmentType: { type: string, minLength: 2, maxLength: 80 }
+        notes: { type: string, maxLength: 1500 }
+    AppointmentConfirmation:
+      type: object
+      required: [id, reference, locationName, date, time, status, managementToken, emailStatus]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        locationName: { type: string }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        time: { type: string }
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        managementToken:
+          type: string
+          description: Private one-time display token; store securely and never place in a URL.
+        emailStatus:
+          $ref: "#/components/schemas/NotificationStatus"
+    AppointmentSummary:
+      type: object
+      required: [id, reference, status, date, time]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        time: { type: string }
+    AppointmentCancelInput:
+      type: object
+      required: [managementToken]
+      properties:
+        managementToken: { type: string, minLength: 20 }
+        reason: { type: string, maxLength: 500 }
+    AppointmentRescheduleInput:
+      type: object
+      required: [managementToken, locationId, date, slotId]
+      properties:
+        managementToken: { type: string, minLength: 20 }
+        locationId: { type: string, minLength: 1 }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        slotId: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+    ReferralUploadInput:
+      type: object
+      required: [fileName, contentType, fileSize]
+      properties:
+        fileName: { type: string, minLength: 1, maxLength: 180 }
+        contentType:
+          type: string
+          enum: [image/jpeg, image/png, image/webp, application/pdf]
+        fileSize: { type: integer, minimum: 1, maximum: 10485760 }
+    ReferralUploadResponse:
+      type: object
+      required: [uploadId, uploadUrl, objectKey, expiresAt]
+      properties:
+        uploadId: { type: string }
+        uploadUrl: { type: string, format: uri }
+        objectKey: { type: string }
+        expiresAt: { type: string, format: date-time }
+    ReferralRequestType:
+      type: string
+      enum:
+        - Endodontic Emergency
+        - Consult and Treat as Necessary
+        - Endodontic Treatment Initiated — Please Complete Treatment
+        - Prognosis/Restorability Consult
+    ExistingRestoration:
+      type: string
+      enum:
+        - Permanent Crown/Bridge
+        - Crown/Bridge with Temporary Cement
+        - Temporary Crown
+        - Permanent Crown to Be Placed
+    CoronalRestoration:
+      type: string
+      enum:
+        - Core Build-up
+        - Place Post and Resin Core
+        - Restore as Desired
+        - Please Call to Discuss
+        - Fiber-Reinforced Restoration
+    ReferralInput:
+      type: object
+      required:
+        - referralDate
+        - dentistName
+        - practiceName
+        - dentistPhone
+        - dentistEmail
+        - patientName
+        - patientPhone
+        - selectedTeeth
+        - requestType
+        - existingRestoration
+        - coronalRestoration
+        - authorizationConfirmed
+      properties:
+        referralDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        dentistName: { type: string, minLength: 2, maxLength: 120 }
+        practiceName: { type: string, minLength: 2, maxLength: 160 }
+        dentistPhone: { type: string, minLength: 8, maxLength: 24 }
+        dentistEmail: { type: string, format: email }
+        patientName: { type: string, minLength: 2, maxLength: 120 }
+        patientPhone: { type: string, minLength: 8, maxLength: 24 }
+        dateOfBirth:
+          type: ["string", "null"]
+          pattern: "^\\d{4}-\\d{2}-\\d{2}$"
+        selectedTeeth:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: integer
+            enum: [11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48]
+        requestType:
+          $ref: "#/components/schemas/ReferralRequestType"
+        existingRestoration:
+          $ref: "#/components/schemas/ExistingRestoration"
+        coronalRestoration:
+          $ref: "#/components/schemas/CoronalRestoration"
+        restorativePlan: { type: string, maxLength: 2000 }
+        clinicalComments: { type: string, maxLength: 4000 }
+        preferredDate: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        preferredTime: { type: ["string", "null"] }
+        uploadIds:
+          type: array
+          maxItems: 5
+          items: { type: string }
+        authorizationConfirmed: { type: boolean, const: true }
+    ReferralConfirmation:
+      type: object
+      required: [id, reference, status, message, emailStatus]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        status:
+          $ref: "#/components/schemas/ReferralStatus"
+        message: { type: string }
+        emailStatus:
+          $ref: "#/components/schemas/NotificationStatus"
+    ReferralStatus:
+      type: string
+      enum: [received, reviewing, contacted, scheduled, closed]
+    AdminLoginInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 12, maxLength: 256 }
+    AdminSession:
+      type: object
+      required: [id, email, displayName, role]
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        role: { type: string, const: admin }
+    AdminDashboard:
+      type: object
+      required: [todayAppointments, upcomingAppointments, pendingReferrals, nextAppointments]
+      properties:
+        todayAppointments: { type: integer }
+        upcomingAppointments: { type: integer }
+        pendingReferrals: { type: integer }
+        nextAppointments:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminAppointment"
+    AdminNotification:
+      type: object
+      required: [id, event, recipient, entityReference, status, attempts, updatedAt]
+      properties:
+        id: { type: string }
+        event: { type: string }
+        recipient: { type: string, format: email }
+        entityReference: { type: string }
+        status:
+          $ref: "#/components/schemas/NotificationStatus"
+        attempts: { type: integer }
+        lastError: { type: ["string", "null"] }
+        updatedAt: { type: string, format: date-time }
+    ReferralAttachmentAccess:
+      type: object
+      required: [url, expiresAt]
+      properties:
+        url: { type: string, format: uri }
+        expiresAt: { type: string, format: date-time }
+    AdminAppointment:
+      type: object
+      required: [id, reference, locationId, locationName, date, time, status, source, patientName, phone, email, appointmentType, internalNotes]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        locationId: { type: string }
+        locationName: { type: string }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        time: { type: string }
+        status:
+          $ref: "#/components/schemas/AppointmentStatus"
+        source:
+          $ref: "#/components/schemas/BookingSource"
+        patientName: { type: string }
+        phone: { type: string }
+        email: { type: ["string", "null"], format: email }
+        appointmentType: { type: string }
+        notes: { type: string }
+        internalNotes: { type: string }
+    PhoneAppointmentInput:
+      type: object
+      required: [locationId, date, slotId, patientName, phone, appointmentType]
+      properties:
+        locationId: { type: string, minLength: 1 }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        slotId: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+        patientName: { type: string, minLength: 2, maxLength: 120 }
+        phone: { type: string, minLength: 8, maxLength: 24 }
+        email: { type: ["string", "null"], format: email }
+        appointmentType: { type: string, minLength: 2, maxLength: 80 }
+        notes: { type: string, maxLength: 1500 }
+        internalNotes: { type: string, maxLength: 2000 }
+    AdminCancelInput:
+      type: object
+      required: [confirmed]
+      properties:
+        confirmed: { type: boolean, const: true }
+        reason: { type: string, maxLength: 500 }
+    AdminRescheduleInput:
+      type: object
+      required: [confirmed, locationId, date, slotId]
+      properties:
+        confirmed: { type: boolean, const: true }
+        locationId: { type: string, minLength: 1 }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        slotId: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
+    AdminReferral:
+      allOf:
+        - $ref: "#/components/schemas/ReferralInput"
+        - type: object
+          required: [id, reference, status, createdAt, internalNotes]
+          properties:
+            id: { type: string }
+            reference: { type: string }
+            status:
+              $ref: "#/components/schemas/ReferralStatus"
+            createdAt: { type: string, format: date-time }
+            internalNotes: { type: string }
+    ReferralStatusInput:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/ReferralStatus"
+        internalNotes: { type: string, maxLength: 2000 }
+    AdminSchedule:
+      type: object
+      required: [locationId, locationName, weeklyHours, slotDurationMinutes]
+      properties:
+        locationId: { type: string }
+        locationName: { type: string }
+        weeklyHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyHours"
+        slotDurationMinutes: { type: integer, minimum: 15, maximum: 240 }
+    ScheduleInput:
+      type: object
+      required: [weeklyHours, slotDurationMinutes]
+      properties:
+        weeklyHours:
+          type: array
+          items:
+            $ref: "#/components/schemas/WeeklyHours"
+        slotDurationMinutes: { type: integer, minimum: 15, maximum: 240 }
+    AvailabilityOverrideInput:
+      type: object
+      required: [locationId, date, kind, slots]
+      properties:
+        locationId: { type: string }
+        date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+        kind:
+          type: string
+          enum: [extra, closed, blocked, emergency]
+        slots:
+          type: array
+          items:
+            type: string
+            pattern: "^([01]\\d|2[0-3]):[0-5]\\d$"
+        reason: { type: string, maxLength: 300 }
+    AvailabilityOverride:
+      allOf:
+        - $ref: "#/components/schemas/AvailabilityOverrideInput"
+        - type: object
+          required: [id]
+          properties:
+            id: { type: string }
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
 

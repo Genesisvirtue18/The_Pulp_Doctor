@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "The Pulp Doctor"
+description = "A patient-facing specialist dentistry website for Dr Charu Makhija, with clinic information, appointment booking, dentist referrals, and a protected administrative workspace."
+version = "1.0.0"
+id = "artifacts/pulp-doctor"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18493
+
+[services.development]
+run = "pnpm --filter @workspace/pulp-doctor run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/pulp-doctor", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/pulp-doctor/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18493"
+BASE_PATH = "/"
