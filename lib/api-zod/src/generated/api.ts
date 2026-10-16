@@ -183,25 +183,41 @@ export const RescheduleAppointmentResponse = zod.object({
 
 
 /**
- * @summary Request a short-lived private upload URL for a referral image
+ * @summary Reserve a short-lived referral file upload
  */
-export const requestReferralUploadBodyFileNameMax = 180;
+export const reserveReferralUploadBodyFileNameMax = 180;
 
-export const requestReferralUploadBodyFileSizeMax = 10485760;
+export const reserveReferralUploadBodyFileSizeMax = 10485760;
 
 
 
-export const RequestReferralUploadBody = zod.object({
-  "fileName": zod.string().min(1).max(requestReferralUploadBodyFileNameMax),
+export const ReserveReferralUploadBody = zod.object({
+  "fileName": zod.string().min(1).max(reserveReferralUploadBodyFileNameMax),
   "contentType": zod.enum(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']),
-  "fileSize": zod.number().int().min(1).max(requestReferralUploadBodyFileSizeMax)
+  "fileSize": zod.number().int().min(1).max(reserveReferralUploadBodyFileSizeMax)
 })
 
-export const RequestReferralUploadResponse = zod.object({
+export const ReserveReferralUploadResponse = zod.object({
   "uploadId": zod.string(),
-  "uploadUrl": zod.string().url(),
-  "objectKey": zod.string(),
+  "uploadToken": zod.string().describe('One-time opaque upload token. Never store it in MongoDB or logs.'),
   "expiresAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Validate and privately store a referral attachment
+ */
+export const UploadReferralFileParams = zod.object({
+  "uploadId": zod.coerce.string()
+})
+
+export const UploadReferralFileBody = zod.object({
+  "file": zod.instanceof(Blob)
+})
+
+export const UploadReferralFileResponse = zod.object({
+  "uploadId": zod.string(),
+  "status": zod.literal("uploaded")
 })
 
 

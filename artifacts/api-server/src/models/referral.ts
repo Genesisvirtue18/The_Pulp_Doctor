@@ -9,7 +9,11 @@ export type ReferralStatus =
 
 export interface ReferralAttachmentMetadata {
   uploadId: string;
-  objectKey: string;
+  cloudinaryAssetId: string;
+  cloudinaryPublicId: string;
+  resourceType: "image";
+  deliveryType: "authenticated";
+  format: string;
   fileName: string;
   contentType: string;
   fileSize: number;
@@ -41,18 +45,26 @@ export interface ReferralDocument extends Document {
 
 export interface ReferralUploadDocument extends Document {
   uploadId: string;
-  objectKey: string;
+  uploadTokenHash: string | null;
+  cloudinaryPublicId: string;
+  cloudinaryAssetId?: string | null;
+  format?: string | null;
   fileName: string;
   contentType: string;
   fileSize: number;
   expiresAt: Date;
+  uploadedAt?: Date | null;
   usedAt?: Date | null;
 }
 
 const referralAttachmentSchema = new Schema<ReferralAttachmentMetadata>(
   {
     uploadId: { type: String, required: true },
-    objectKey: { type: String, required: true },
+    cloudinaryAssetId: { type: String, required: true },
+    cloudinaryPublicId: { type: String, required: true },
+    resourceType: { type: String, required: true, enum: ["image"] },
+    deliveryType: { type: String, required: true, enum: ["authenticated"] },
+    format: { type: String, required: true },
     fileName: { type: String, required: true },
     contentType: { type: String, required: true },
     fileSize: { type: Number, required: true },
@@ -95,11 +107,15 @@ const referralSchema = new Schema<ReferralDocument>(
 const referralUploadSchema = new Schema<ReferralUploadDocument>(
   {
     uploadId: { type: String, required: true, unique: true, index: true },
-    objectKey: { type: String, required: true, unique: true },
+    uploadTokenHash: { type: String, default: null },
+    cloudinaryPublicId: { type: String, required: true, unique: true },
+    cloudinaryAssetId: { type: String, default: null },
+    format: { type: String, default: null },
     fileName: { type: String, required: true },
     contentType: { type: String, required: true },
     fileSize: { type: Number, required: true, min: 1 },
-    expiresAt: { type: Date, required: true, index: { expires: 0 } },
+    expiresAt: { type: Date, required: true, index: true },
+    uploadedAt: { type: Date, default: null },
     usedAt: { type: Date, default: null },
   },
   { timestamps: true, strict: "throw" },

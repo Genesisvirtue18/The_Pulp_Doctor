@@ -1,0 +1,224 @@
+# Task: Replace S3 with Cloudinary + VS Code Setup + Vercel Deployment
+
+Update the existing **The Pulp Doctor — Dr Charu Makhija** project. Preserve all working features and modify the existing code incrementally. Do not rebuild the application from scratch.
+
+The project currently contains:
+- `artifacts/pulp-doctor/` — React + TypeScript + Vite frontend
+- `artifacts/api-server/` — Express API, MongoDB/Mongoose models, authentication, bookings, referrals, email, and storage services
+- `lib/api-spec/openapi.yaml` — API contract
+
+The actual repository structure must be inspected before making changes.
+
+## 1. Replace S3 with Cloudinary
+
+Completely remove the S3-compatible storage integration and replace it with Cloudinary using the official Cloudinary Node.js SDK.
+
+- Remove obsolete S3 dependencies, imports, services, upload URL generation, environment variables, and documentation.
+- Preserve MongoDB, authentication, appointment booking, referral workflows, and email notifications.
+- Configure Cloudinary exclusively in the backend.
+- Support JPEG, PNG, WebP, and PDF attachments, maximum 10 MB per file.
+- Validate actual file signatures, MIME types, extensions, and file sizes.
+- Store Cloudinary asset identifiers and necessary metadata in MongoDB.
+- Ensure failed uploads or database writes do not produce falsely successful submissions.
+- Handle orphaned files and attachment deletion according to the approved retention policy.
+
+### Privacy and authorization
+
+Referral attachments can contain sensitive patient information.
+
+- Configure private/authenticated asset delivery.
+- Never use unrestricted public URLs for clinical attachments.
+- Restrict attachment retrieval to authenticated, authorized administrators.
+- Use short-lived signed access or an appropriately secured backend proxy.
+- Verify that the selected Cloudinary delivery mode supports the required PDF and image formats.
+- Never expose Cloudinary API secrets in frontend code.
+
+Required backend environment variables:
+
+`CLOUDINARY_CLOUD_NAME`
+
+`CLOUDINARY_API_KEY`
+
+`CLOUDINARY_API_SECRET`
+
+Update `.env.example`, storage services, routes, validation, error handling, tests, and README accordingly.
+
+## 2. Configure the project for VS Code
+
+Inspect the repository and provide accurate, step-by-step setup instructions for running the existing project locally in VS Code.
+
+The README must explain:
+
+1. Required software: Node.js, Git, pnpm if the project uses pnpm, VS Code, and MongoDB Atlas.
+2. How to clone the GitHub repository or open the existing project folder.
+3. How to install dependencies from the repository root.
+4. How to configure frontend and backend environment variables.
+5. How to connect MongoDB Atlas securely.
+6. How to configure Cloudinary and Resend.
+7. How to create the administrator using the existing secure setup script.
+8. How to seed clinic schedules for development.
+9. How to run frontend and backend development servers.
+10. How to run type checks, tests, and production builds.
+11. How to troubleshoot missing environment variables, database connection failures, CORS errors, email failures, and upload failures.
+
+Use the repository's existing scripts and package manager. Do not invent commands. Inspect `package.json` files and workspace configuration before documenting commands.
+
+If the existing project uses a root workspace, preserve that structure.
+
+Document the expected local development URLs for the frontend and API after verifying the actual port configuration.
+
+## 3. Environment variables
+
+Maintain separate environment configuration for frontend and backend.
+
+### Backend environment variables
+
+Update `artifacts/api-server/.env.example` to include the variables actually required by the existing implementation, such as:
+
+`NODE_ENV`
+
+`PORT`
+
+`MONGODB_URI`
+
+`SESSION_SECRET`
+
+`APP_ORIGIN`
+
+`DOCTOR_EMAIL`
+
+`EMAIL_FROM`
+
+`RESEND_API_KEY`
+
+`CLOUDINARY_CLOUD_NAME`
+
+`CLOUDINARY_API_KEY`
+
+`CLOUDINARY_API_SECRET`
+
+Add any other genuinely required variables discovered in the code.
+
+Requirements:
+- `MONGODB_URI` must use the production or development MongoDB Atlas connection string as appropriate.
+- `SESSION_SECRET` must be a strong random secret.
+- `APP_ORIGIN` must match the frontend origin when the frontend and API use different origins.
+- `RESEND_API_KEY` and `EMAIL_FROM` must match the configured email provider.
+- `DOCTOR_EMAIL` should default to `drcharu.25@gmail.com` if that is how the existing application is configured.
+- Never commit real credentials.
+
+### Frontend environment variables
+
+Inspect the frontend API client and document only the variables it actually uses.
+
+If required, configure:
+
+`VITE_API_BASE_URL`
+
+Use it for the Express API base URL. Do not place MongoDB credentials, session secrets, Cloudinary API secrets, or Resend keys in Vite variables because Vite variables are exposed to browser code.
+
+Update `.env.example` files without overwriting existing user configuration.
+
+## 4. Vercel deployment configuration
+
+Prepare a deployment guide for the actual architecture. Do not assume the entire Express server can run on Vercel unchanged.
+
+### First inspect deployment compatibility
+
+Determine whether:
+- The React + Vite frontend can be deployed independently to Vercel.
+- The existing Express API can run as a supported Vercel Function or should be deployed separately as a persistent Node.js service.
+- The current monorepo structure requires a specific Vercel root directory, build command, output directory, or routing configuration.
+
+Prefer the least disruptive architecture that preserves the existing backend behavior.
+
+If deploying the frontend to Vercel and the Express API elsewhere, configure:
+
+**Vercel project environment variable:**
+
+`VITE_API_BASE_URL=https://YOUR-DEPLOYED-API-DOMAIN`
+
+Replace the placeholder with the actual deployed API URL. Do not invent a production URL.
+
+If the backend is deployed on Vercel as well, configure the API routing and environment variables according to the actual supported deployment architecture.
+
+### Backend deployment environment variables
+
+For whichever service hosts the Express API, document how to configure:
+
+- `NODE_ENV=production`
+- `PORT` only if required by the selected hosting platform
+- `MONGODB_URI`
+- `SESSION_SECRET`
+- `APP_ORIGIN`
+- `DOCTOR_EMAIL`
+- `EMAIL_FROM`
+- `RESEND_API_KEY`
+- `CLOUDINARY_CLOUD_NAME`
+- `CLOUDINARY_API_KEY`
+- `CLOUDINARY_API_SECRET`
+
+Add any additional variables required by the actual implementation.
+
+Never expose backend secrets as `VITE_*` variables or put them in frontend build configuration.
+
+### Vercel-specific requirements
+
+- Explain how to import the GitHub repository into Vercel.
+- Explain how to select the correct frontend root directory.
+- Configure the correct build command and output directory based on the existing workspace.
+- Configure `VITE_API_BASE_URL` separately for Development, Preview, and Production where appropriate.
+- Explain how to redeploy after changing environment variables.
+- Configure CORS to allow only the real frontend origins.
+- Verify authentication cookies, HTTPS, credentials, and cross-origin requests if frontend and backend use different origins.
+- Ensure client-side routes such as `/refer-a-patient` and `/admin` work after refreshing the page.
+- Verify that API requests reach the correct backend and do not return the Vite HTML fallback.
+- Never run database seed scripts or administrator creation scripts automatically during production builds.
+- Never put secrets in the Git repository or Vercel frontend environment.
+
+If the backend is not compatible with Vercel Functions, explain why and recommend a suitable Node.js hosting service rather than pretending the deployment works.
+
+## 5. Preserve existing application features
+
+Do not remove or break:
+- The public landing page and supplied logos.
+- All three clinic locations and their weekly schedules.
+- The appointment calendar and live availability.
+- Online and manual phone bookings.
+- Booking conflict prevention.
+- Sunday emergency slot management.
+- Administrator authentication and session security.
+- Dentist referral form and FDI tooth chart.
+- Requested coronal restoration options, including Fiber-Reinforced Restoration.
+- Doctor and dentist email notifications.
+- MongoDB referral records and attachment metadata.
+- OpenAPI specification and generated frontend hooks/schemas.
+
+Do not include Amalgam or Prepare Post Space in the referral form.
+
+## 6. Testing and final report
+
+After implementing the changes:
+
+1. Run existing type checks and builds.
+2. Run available automated tests.
+3. Test the local setup instructions in a clean environment where feasible.
+4. Verify MongoDB connectivity.
+5. Verify Cloudinary upload, private retrieval, unauthorized access denial, and failure handling using dummy files.
+6. Verify email configuration and booking functionality.
+7. Inspect all remaining references to S3 and remove obsolete code or documentation.
+8. Verify that frontend production builds contain no backend secrets.
+9. Verify Vercel routing and API connectivity if deployment credentials and access are available.
+
+Finally, provide:
+
+- Files changed.
+- Exact commands to run the project in VS Code.
+- Required local environment variables.
+- Required Vercel frontend environment variables.
+- Required backend hosting environment variables.
+- Deployment steps.
+- Tests executed and their actual results.
+- Any remaining configuration or deployment blockers.
+
+Do not claim successful deployment or external integration testing without actual verification. Do not overwrite unrelated code or real environment files.

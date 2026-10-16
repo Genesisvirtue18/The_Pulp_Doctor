@@ -6,9 +6,9 @@
  * OpenAPI spec version: 0.1.0
  */
 
-export interface ReferralUploadResponse {
+export interface ReferralUploadReservation {
   uploadId: string;
-  uploadUrl: string;
-  objectKey: string;
+  /** One-time opaque upload token. Never store it in MongoDB or logs. */
+  uploadToken: string;
   expiresAt: Date;
 }

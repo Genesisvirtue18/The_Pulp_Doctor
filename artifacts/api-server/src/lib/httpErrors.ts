@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 import { isDuplicateKeyError, MongoUnavailableError } from "./mongo";
-import { InvalidReferralFileError, PrivateStorageUnavailableError } from "./privateStorage";
+import {
+  CloudinaryUnavailableError,
+  CloudinaryUpstreamError,
+  InvalidReferralFileError,
+} from "./cloudinaryStorage";
 import { ClinicNotFoundError, SlotUnavailableError } from "../services/clinic";
 
 export function sendApiError(
@@ -12,8 +16,12 @@ export function sendApiError(
     res.status(503).json({ error: "MongoDB Atlas is not configured." });
     return;
   }
-  if (error instanceof PrivateStorageUnavailableError) {
-    res.status(503).json({ error: "Private referral file storage is not configured." });
+  if (error instanceof CloudinaryUnavailableError) {
+    res.status(503).json({ error: "Cloudinary is not configured." });
+    return;
+  }
+  if (error instanceof CloudinaryUpstreamError) {
+    res.status(502).json({ error: "Private file storage could not complete the request." });
     return;
   }
   if (error instanceof InvalidReferralFileError) {

@@ -144,11 +144,11 @@ paths:
           description: Requested slot is no longer available
         "403":
           description: Invalid management token
-  /referral-uploads/request-url:
+  /referral-uploads/reservations:
     post:
-      operationId: requestReferralUpload
+      operationId: reserveReferralUpload
       tags: [public]
-      summary: Request a short-lived private upload URL for a referral image
+      summary: Reserve a short-lived referral file upload
       requestBody:
         required: true
         content:
@@ -157,13 +157,43 @@ paths:
               $ref: "#/components/schemas/ReferralUploadInput"
       responses:
         "201":
-          description: Short-lived upload authorization
+          description: Short-lived one-time upload authorization
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReferralUploadResponse"
+                $ref: "#/components/schemas/ReferralUploadReservation"
         "503":
-          description: Private file storage is not configured
+          description: Cloudinary is not configured
+  /referral-uploads/{uploadId}/content:
+    put:
+      operationId: uploadReferralFile
+      tags: [public]
+      summary: Validate and privately store a referral attachment
+      parameters:
+        - name: uploadId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ReferralFileUpload"
+      responses:
+        "201":
+          description: Attachment validated and stored privately
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralUploadComplete"
+        "400":
+          description: Invalid, expired, or mismatched upload
+        "413":
+          description: File exceeds the 10 MB limit
+        "503":
+          description: Cloudinary is not configured
   /referrals:
     post:
       operationId: createReferral
@@ -725,14 +755,28 @@ components:
           type: string
           enum: [image/jpeg, image/png, image/webp, application/pdf]
         fileSize: { type: integer, minimum: 1, maximum: 10485760 }
-    ReferralUploadResponse:
+    ReferralFileUpload:
       type: object
-      required: [uploadId, uploadUrl, objectKey, expiresAt]
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+    ReferralUploadReservation:
+      type: object
+      required: [uploadId, uploadToken, expiresAt]
       properties:
         uploadId: { type: string }
-        uploadUrl: { type: string, format: uri }
-        objectKey: { type: string }
+        uploadToken:
+          type: string
+          description: One-time opaque upload token. Never store it in MongoDB or logs.
         expiresAt: { type: string, format: date-time }
+    ReferralUploadComplete:
+      type: object
+      required: [uploadId, status]
+      properties:
+        uploadId: { type: string }
+        status: { type: string, const: uploaded }
     ReferralRequestType:
       type: string
       enum:

@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { connectMongo } from "../lib/mongo";
 import { ClinicLocationModel, DoctorScheduleModel } from "../models/clinic";
 import { logger } from "../lib/logger";

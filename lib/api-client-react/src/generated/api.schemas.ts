@@ -194,11 +194,20 @@ export interface ReferralUploadInput {
   fileSize: number;
 }
 
-export interface ReferralUploadResponse {
+export interface ReferralFileUpload {
+  file: Blob;
+}
+
+export interface ReferralUploadReservation {
   uploadId: string;
-  uploadUrl: string;
-  objectKey: string;
+  /** One-time opaque upload token. Never store it in MongoDB or logs. */
+  uploadToken: string;
   expiresAt: string;
+}
+
+export interface ReferralUploadComplete {
+  uploadId: string;
+  status: 'uploaded';
 }
 
 export type ReferralRequestType = typeof ReferralRequestType[keyof typeof ReferralRequestType];

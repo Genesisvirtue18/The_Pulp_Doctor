@@ -1,5 +1,12 @@
-import { randomUUID } from "node:crypto";
-import { Router, type IRouter } from "express";
+import {
+  createHash,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import { Router, type IRouter, type NextFunction, type Request, type Response } from "express";
+import multer, { MulterError } from "multer";
+import rateLimit from "express-rate-limit";
 import mongoose from "mongoose";
 import {
   CancelAppointmentBody,
@@ -12,15 +19,15 @@ import {
   GetAvailabilityQueryParams,
   GetAvailabilityResponse,
   ListLocationsResponse,
-  RequestReferralUploadBody,
-  RequestReferralUploadResponse,
+  ReferralUploadInput,
+  ReferralUploadReservation,
+  ReferralUploadComplete,
   RescheduleAppointmentBody,
   RescheduleAppointmentParams,
   RescheduleAppointmentResponse,
 } from "@workspace/api-zod";
 import { connectMongo } from "../lib/mongo";
 import { sendApiError } from "../lib/httpErrors";
-import { AppointmentModel } from "../models/appointment";
 import {
   ReferralModel,
   ReferralUploadModel,
@@ -30,12 +37,26 @@ import { createOnlineAppointment, cancelByPatient, isBookingConflict, reschedule
 import { getAvailability, listLocations } from "../services/clinic";
 import { notifyReferral } from "../services/email";
 import {
-  createReferralUploadUrl,
+  createReferralPublicId,
+  deleteReferralAsset,
+  ensureCloudinaryConfigured,
+  InvalidReferralFileError,
+  storeReferralFile,
   validateReferralFileMetadata,
   verifyPrivateUpload,
-} from "../lib/privateStorage";
+} from "../lib/cloudinaryStorage";
 
 const router: IRouter = Router();
+const uploadRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const intakeFileUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 },
+}).single("file");
 const referralRequestKinds = [
   "Endodontic Emergency",
   "Consult and Treat as Necessary",
@@ -191,10 +212,44 @@ router.post(
   },
 );
 
+function receiveReferralFile(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  intakeFileUpload(req, res, (error: unknown) => {
+    if (error instanceof MulterError) {
+      res
+        .status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400)
+        .json({ error: "Choose one approved attachment no larger than 10 MB." });
+      return;
+    }
+    if (error) {
+      next(error);
+      return;
+    }
+    next();
+  });
+}
+
+function hashUploadToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function matchesUploadToken(token: string, expectedHash: string): boolean {
+  if (!/^[a-f0-9]{64}$/i.test(expectedHash)) {
+    return false;
+  }
+  const actual = Buffer.from(hashUploadToken(token), "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
 router.post(
-  "/referral-uploads/request-url",
+  "/referral-uploads/reservations",
+  uploadRateLimiter,
   async (req, res): Promise<void> => {
-    const parsed = RequestReferralUploadBody.safeParse(req.body);
+    const parsed = ReferralUploadInput.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Only approved image or PDF files up to 10 MB are accepted." });
       return;
@@ -206,27 +261,126 @@ router.post(
         input.contentType,
         input.fileSize,
       );
+      ensureCloudinaryConfigured();
       await connectMongo();
-      const signed = await createReferralUploadUrl({
-        fileName: input.fileName,
-        contentType: input.contentType,
-        fileSize: input.fileSize,
-      });
+      const uploadId = randomUUID();
+      const uploadToken = randomBytes(32).toString("base64url");
+      const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+      const cloudinaryPublicId = createReferralPublicId(uploadId);
       await ReferralUploadModel.create({
-        uploadId: signed.uploadId,
-        objectKey: signed.objectKey,
+        uploadId,
+        uploadTokenHash: hashUploadToken(uploadToken),
+        cloudinaryPublicId,
         fileName: input.fileName,
         contentType: input.contentType,
         fileSize: input.fileSize,
-        expiresAt: signed.expiresAt,
+        expiresAt,
       });
       res.status(201).json(
-        RequestReferralUploadResponse.parse({
-          uploadId: signed.uploadId,
-          uploadUrl: signed.uploadUrl,
-          objectKey: signed.objectKey,
-          expiresAt: signed.expiresAt.toISOString(),
+        ReferralUploadReservation.parse({
+          uploadId,
+          uploadToken,
+          expiresAt: expiresAt.toISOString(),
         }),
+      );
+    } catch (error) {
+      sendApiError(req, res, error);
+    }
+  },
+);
+
+router.put(
+  "/referral-uploads/:uploadId/content",
+  uploadRateLimiter,
+  receiveReferralFile,
+  async (req, res): Promise<void> => {
+    const uploadId =
+      typeof req.params.uploadId === "string" ? req.params.uploadId : "";
+    const token = req.get("x-upload-token") ?? "";
+    if (!uploadId || !token || !req.file) {
+      res.status(400).json({ error: "The upload authorization or file is missing." });
+      return;
+    }
+
+    let cloudinaryAsset:
+      | Awaited<ReturnType<typeof storeReferralFile>>
+      | undefined;
+    try {
+      await connectMongo();
+      const reservation = await ReferralUploadModel.findOne({ uploadId });
+      if (
+        !reservation ||
+        reservation.expiresAt <= new Date() ||
+        reservation.uploadedAt ||
+        !reservation.uploadTokenHash
+      ) {
+        res.status(410).json({ error: "The upload authorization has expired or was already used." });
+        return;
+      }
+      if (!matchesUploadToken(token, reservation.uploadTokenHash)) {
+        res.status(403).json({ error: "The upload authorization is invalid." });
+        return;
+      }
+      if (
+        req.file.originalname !== reservation.fileName ||
+        req.file.mimetype !== reservation.contentType
+      ) {
+        throw new InvalidReferralFileError(
+          "The file name or MIME type does not match the upload reservation.",
+        );
+      }
+      cloudinaryAsset = await storeReferralFile({
+        cloudinaryPublicId: reservation.cloudinaryPublicId,
+        fileName: reservation.fileName,
+        contentType: reservation.contentType,
+        expectedSize: reservation.fileSize,
+        bytes: req.file.buffer,
+      });
+
+      let savedReservation;
+      try {
+        savedReservation = await ReferralUploadModel.findOneAndUpdate(
+          {
+            _id: reservation._id,
+            uploadTokenHash: reservation.uploadTokenHash,
+            uploadedAt: null,
+            expiresAt: { $gt: new Date() },
+          },
+          {
+            $set: {
+              cloudinaryAssetId: cloudinaryAsset.cloudinaryAssetId,
+              format: cloudinaryAsset.format,
+              uploadedAt: new Date(),
+              uploadTokenHash: null,
+            },
+          },
+          { new: true, runValidators: true },
+        );
+      } catch (error) {
+        await deleteReferralAsset(cloudinaryAsset.cloudinaryPublicId).catch(
+          (cleanupError: unknown) => {
+            req.log.error(
+              {
+                errorName:
+                  cleanupError instanceof Error
+                    ? cleanupError.name
+                    : "UnknownError",
+              },
+              "Could not remove an unrecorded Cloudinary upload",
+            );
+          },
+        );
+        throw error;
+      }
+      if (!savedReservation) {
+        await deleteReferralAsset(cloudinaryAsset.cloudinaryPublicId).catch(
+          () => undefined,
+        );
+        res.status(409).json({ error: "This upload authorization is no longer valid." });
+        return;
+      }
+      res.status(201).json(
+        ReferralUploadComplete.parse({ uploadId, status: "uploaded" }),
       );
     } catch (error) {
       sendApiError(req, res, error);
@@ -257,6 +411,9 @@ router.post("/referrals", async (req, res): Promise<void> => {
     const uploads = uploadIds.length
       ? await ReferralUploadModel.find({
           uploadId: { $in: uploadIds },
+          cloudinaryAssetId: { $ne: null },
+          format: { $ne: null },
+          uploadedAt: { $ne: null },
           usedAt: null,
           expiresAt: { $gt: new Date() },
         })
@@ -267,9 +424,13 @@ router.post("/referrals", async (req, res): Promise<void> => {
     }
     for (const upload of uploads) {
       await verifyPrivateUpload({
-        objectKey: upload.objectKey,
-        contentType: upload.contentType,
+        cloudinaryAssetId: upload.cloudinaryAssetId!,
+        cloudinaryPublicId: upload.cloudinaryPublicId,
+        resourceType: "image",
+        deliveryType: "authenticated",
+        format: upload.format!,
         fileSize: upload.fileSize,
+        contentType: upload.contentType,
       });
     }
 
@@ -280,6 +441,9 @@ router.post("/referrals", async (req, res): Promise<void> => {
         const claimedUploads = uploadIds.length
           ? await ReferralUploadModel.find({
               uploadId: { $in: uploadIds },
+              cloudinaryAssetId: { $ne: null },
+              format: { $ne: null },
+              uploadedAt: { $ne: null },
               usedAt: null,
               expiresAt: { $gt: new Date() },
             }).session(session)
@@ -290,7 +454,11 @@ router.post("/referrals", async (req, res): Promise<void> => {
         const attachments: ReferralAttachmentMetadata[] = claimedUploads.map(
           (upload) => ({
             uploadId: upload.uploadId,
-            objectKey: upload.objectKey,
+            cloudinaryAssetId: upload.cloudinaryAssetId!,
+            cloudinaryPublicId: upload.cloudinaryPublicId,
+            resourceType: "image",
+            deliveryType: "authenticated",
+            format: upload.format!,
             fileName: upload.fileName,
             contentType: upload.contentType,
             fileSize: upload.fileSize,
@@ -326,11 +494,19 @@ router.post("/referrals", async (req, res): Promise<void> => {
         );
         referral = created;
         if (uploadIds.length) {
-          await ReferralUploadModel.updateMany(
-            { uploadId: { $in: uploadIds }, usedAt: null },
+          const updated = await ReferralUploadModel.updateMany(
+            {
+              uploadId: { $in: uploadIds },
+              cloudinaryAssetId: { $ne: null },
+              uploadedAt: { $ne: null },
+              usedAt: null,
+            },
             { $set: { usedAt: new Date() } },
             { session },
           );
+          if (updated.modifiedCount !== uploadIds.length) {
+            throw new Error("A referral attachment was used by another submission.");
+          }
         }
       });
     } finally {

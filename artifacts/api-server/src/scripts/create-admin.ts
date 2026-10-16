@@ -1,3 +1,4 @@
+import "dotenv/config";
 import readline from "node:readline";
 import bcrypt from "bcryptjs";
 import { connectMongo } from "../lib/mongo";

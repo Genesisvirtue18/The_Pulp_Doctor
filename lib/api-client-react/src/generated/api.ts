@@ -47,10 +47,12 @@ import type {
   PhoneAppointmentInput,
   ReferralAttachmentAccess,
   ReferralConfirmation,
+  ReferralFileUpload,
   ReferralInput,
   ReferralStatusInput,
+  ReferralUploadComplete,
   ReferralUploadInput,
-  ReferralUploadResponse,
+  ReferralUploadReservation,
   ScheduleInput
 } from './api.schemas';
 
@@ -586,18 +588,18 @@ export const useRescheduleAppointment = <TError = ErrorType<void>,
       return useMutation(getRescheduleAppointmentMutationOptions(options));
     }
 
-export const getRequestReferralUploadUrl = () => {
+export const getReserveReferralUploadUrl = () => {
 
 
 
 
-  return `/api/referral-uploads/request-url`
+  return `/api/referral-uploads/reservations`
 }
 
 /**
- * @summary Request a short-lived private upload URL for a referral image
+ * @summary Reserve a short-lived referral file upload
  */
-export const requestReferralUpload = async (referralUploadInput: ReferralUploadInput, options?: Parameters<typeof customFetch>[1]): Promise<ReferralUploadResponse> => {
+export const reserveReferralUpload = async (referralUploadInput: ReferralUploadInput, options?: Parameters<typeof customFetch>[1]): Promise<ReferralUploadReservation> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -613,7 +615,7 @@ export const requestReferralUpload = async (referralUploadInput: ReferralUploadI
     }
     return headers;
   };
-return customFetch<ReferralUploadResponse>(getRequestReferralUploadUrl(),
+return customFetch<ReferralUploadReservation>(getReserveReferralUploadUrl(),
   {
     ...options,
     method: 'POST',
@@ -626,13 +628,13 @@ return customFetch<ReferralUploadResponse>(getRequestReferralUploadUrl(),
 
 
 
-export const getRequestReferralUploadMutationKey = () => ['requestReferralUpload'] as const;
+export const getReserveReferralUploadMutationKey = () => ['reserveReferralUpload'] as const;
 
-export const getRequestReferralUploadMutationOptions = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestReferralUpload>>, TError,RequestReferralUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
-): UseMutationOptions<Awaited<ReturnType<typeof requestReferralUpload>>, TError,RequestReferralUploadMutationVariables, TContext> => {
+export const getReserveReferralUploadMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reserveReferralUpload>>, TError,ReserveReferralUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reserveReferralUpload>>, TError,ReserveReferralUploadMutationVariables, TContext> => {
 
-const mutationKey = getRequestReferralUploadMutationKey();
+const mutationKey = getReserveReferralUploadMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
       options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
       options
@@ -642,10 +644,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestReferralUpload>>, RequestReferralUploadMutationVariables> = (props) => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reserveReferralUpload>>, ReserveReferralUploadMutationVariables> = (props) => {
           const {data} = props ?? {};
 
-          return  requestReferralUpload(data,requestOptions)
+          return  reserveReferralUpload(data,requestOptions)
         }
 
 
@@ -655,23 +657,100 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
   return  { mutationFn, ...mutationOptions }}
 
-    export type RequestReferralUploadMutationResult = NonNullable<Awaited<ReturnType<typeof requestReferralUpload>>>
-    export type RequestReferralUploadMutationBody = BodyType<ReferralUploadInput>
-    export type RequestReferralUploadMutationError = ErrorType<void>
-    export type RequestReferralUploadMutationVariables = {data: BodyType<ReferralUploadInput>}
+    export type ReserveReferralUploadMutationResult = NonNullable<Awaited<ReturnType<typeof reserveReferralUpload>>>
+    export type ReserveReferralUploadMutationBody = BodyType<ReferralUploadInput>
+    export type ReserveReferralUploadMutationError = ErrorType<void>
+    export type ReserveReferralUploadMutationVariables = {data: BodyType<ReferralUploadInput>}
 
     /**
- * @summary Request a short-lived private upload URL for a referral image
+ * @summary Reserve a short-lived referral file upload
  */
-export const useRequestReferralUpload = <TError = ErrorType<void>,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestReferralUpload>>, TError,RequestReferralUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+export const useReserveReferralUpload = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reserveReferralUpload>>, TError,ReserveReferralUploadMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
-        Awaited<ReturnType<typeof requestReferralUpload>>,
+        Awaited<ReturnType<typeof reserveReferralUpload>>,
         TError,
-        RequestReferralUploadMutationVariables,
+        ReserveReferralUploadMutationVariables,
         TContext
       > => {
-      return useMutation(getRequestReferralUploadMutationOptions(options));
+      return useMutation(getReserveReferralUploadMutationOptions(options));
+    }
+
+export const getUploadReferralFileUrl = (uploadId: string,) => {
+
+
+
+
+  return `/api/referral-uploads/${uploadId}/content`
+}
+
+/**
+ * @summary Validate and privately store a referral attachment
+ */
+export const uploadReferralFile = async (uploadId: string,
+    referralFileUpload: ReferralFileUpload, options?: Parameters<typeof customFetch>[1]): Promise<ReferralUploadComplete> => {
+    const formData = new FormData();
+formData.append(`file`, referralFileUpload.file);
+
+  return customFetch<ReferralUploadComplete>(getUploadReferralFileUrl(uploadId),
+  {
+    ...options,
+    method: 'PUT'
+    ,
+    body: formData
+  }
+);}
+
+
+
+
+
+export const getUploadReferralFileMutationKey = () => ['uploadReferralFile'] as const;
+
+export const getUploadReferralFileMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadReferralFile>>, TError,UploadReferralFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof uploadReferralFile>>, TError,UploadReferralFileMutationVariables, TContext> => {
+
+const mutationKey = getUploadReferralFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof uploadReferralFile>>, UploadReferralFileMutationVariables> = (props) => {
+          const {uploadId,data} = props ?? {};
+
+          return  uploadReferralFile(uploadId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UploadReferralFileMutationResult = NonNullable<Awaited<ReturnType<typeof uploadReferralFile>>>
+    export type UploadReferralFileMutationBody = BodyType<ReferralFileUpload>
+    export type UploadReferralFileMutationError = ErrorType<void>
+    export type UploadReferralFileMutationVariables = {uploadId: string;data: BodyType<ReferralFileUpload>}
+
+    /**
+ * @summary Validate and privately store a referral attachment
+ */
+export const useUploadReferralFile = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof uploadReferralFile>>, TError,UploadReferralFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof uploadReferralFile>>,
+        TError,
+        UploadReferralFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUploadReferralFileMutationOptions(options));
     }
 
 export const getCreateReferralUrl = () => {

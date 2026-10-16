@@ -19,13 +19,26 @@ declare global {
 }
 
 const COOKIE_NAME = "pulp_admin_session";
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  secure: process.env.NODE_ENV === "production",
-  sameSite: "strict" as const,
-  path: "/api/admin",
-  maxAge: 8 * 60 * 60 * 1000,
-};
+type CookieSameSite = "strict" | "lax" | "none";
+
+function cookieSameSite(): CookieSameSite {
+  const configured = process.env.AUTH_COOKIE_SAME_SITE?.toLowerCase();
+  if (configured === "none" || configured === "lax") {
+    return configured;
+  }
+  return "strict";
+}
+
+function cookieOptions() {
+  const sameSite = cookieSameSite();
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production" || sameSite === "none",
+    sameSite,
+    path: "/api/admin",
+    maxAge: 8 * 60 * 60 * 1000,
+  };
+}
 
 function sessionSecret(): string {
   const secret = process.env.SESSION_SECRET;
@@ -44,14 +57,14 @@ export function setAdminSessionCookie(
     sessionSecret(),
     { algorithm: "HS256", expiresIn: "8h", issuer: "the-pulp-doctor" },
   );
-  res.cookie(COOKIE_NAME, token, COOKIE_OPTIONS);
+  res.cookie(COOKIE_NAME, token, cookieOptions());
 }
 
 export function clearAdminSessionCookie(res: Response): void {
   res.clearCookie(COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production" || cookieSameSite() === "none",
+    sameSite: cookieSameSite(),
     path: "/api/admin",
   });
 }
@@ -114,10 +127,13 @@ export function requireSameOrigin(
   try {
     const originUrl = new URL(origin);
     const host = req.get("host");
-    const configuredOrigin = process.env.APP_ORIGIN;
+    const configuredOrigins = (process.env.APP_ORIGIN ?? "")
+      .split(",")
+      .map((value) => value.trim())
+      .filter(Boolean);
     if (
-      (configuredOrigin && origin === configuredOrigin) ||
-      (!configuredOrigin && host && originUrl.host === host)
+      (configuredOrigins.length > 0 && configuredOrigins.includes(origin)) ||
+      (configuredOrigins.length === 0 && host && originUrl.host === host)
     ) {
       next();
       return;

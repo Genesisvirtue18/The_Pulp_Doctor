@@ -61,7 +61,7 @@ import {
   toAdminAppointment,
 } from "../services/booking";
 import { retryNotification } from "../services/email";
-import { createReferralReadUrl } from "../lib/privateStorage";
+import { createReferralReadUrl } from "../lib/cloudinaryStorage";
 
 const router: IRouter = Router();
 const loginLimiter = rateLimit({
@@ -107,7 +107,7 @@ function toReferral(referral: {
   clinicalComments: string;
   preferredDate?: string | null;
   preferredTime?: string | null;
-  attachments: { uploadId: string }[];
+  attachments: { uploadId?: string }[];
   authorizationConfirmed: boolean;
   status: string;
   internalNotes: string;
@@ -132,7 +132,9 @@ function toReferral(referral: {
     clinicalComments: referral.clinicalComments,
     preferredDate: referral.preferredDate ?? null,
     preferredTime: referral.preferredTime ?? null,
-    uploadIds: referral.attachments.map((attachment) => attachment.uploadId),
+    uploadIds: referral.attachments
+      .map((attachment) => attachment.uploadId)
+      .filter((uploadId): uploadId is string => Boolean(uploadId)),
     authorizationConfirmed: referral.authorizationConfirmed,
     status: referral.status,
     internalNotes: referral.internalNotes,
@@ -486,7 +488,21 @@ router.post(
         res.status(404).json({ error: "Attachment was not found." });
         return;
       }
-      const result = await createReferralReadUrl(attachment.objectKey);
+      if (
+        !attachment.cloudinaryAssetId ||
+        !attachment.cloudinaryPublicId ||
+        !attachment.format ||
+        attachment.deliveryType !== "authenticated"
+      ) {
+        res.status(409).json({
+          error: "This attachment needs storage migration before it can be opened.",
+        });
+        return;
+      }
+      const result = await createReferralReadUrl(
+        attachment.cloudinaryPublicId,
+        attachment.format,
+      );
       res.json(
         RequestReferralAttachmentAccessUrlResponse.parse({
           url: result.url,
