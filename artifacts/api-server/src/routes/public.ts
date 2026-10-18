@@ -19,9 +19,9 @@ import {
   GetAvailabilityQueryParams,
   GetAvailabilityResponse,
   ListLocationsResponse,
-  ReferralUploadInput,
-  ReferralUploadReservation,
-  ReferralUploadComplete,
+  ReserveReferralUploadBody,
+  ReserveReferralUploadResponse,
+  UploadReferralFileResponse,
   RescheduleAppointmentBody,
   RescheduleAppointmentParams,
   RescheduleAppointmentResponse,
@@ -249,7 +249,7 @@ router.post(
   "/referral-uploads/reservations",
   uploadRateLimiter,
   async (req, res): Promise<void> => {
-    const parsed = ReferralUploadInput.safeParse(req.body);
+    const parsed = ReserveReferralUploadBody.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Only approved image or PDF files up to 10 MB are accepted." });
       return;
@@ -277,7 +277,7 @@ router.post(
         expiresAt,
       });
       res.status(201).json(
-        ReferralUploadReservation.parse({
+        ReserveReferralUploadResponse.parse({
           uploadId,
           uploadToken,
           expiresAt: expiresAt.toISOString(),
@@ -380,7 +380,7 @@ router.put(
         return;
       }
       res.status(201).json(
-        ReferralUploadComplete.parse({ uploadId, status: "uploaded" }),
+        UploadReferralFileResponse.parse({ uploadId, status: "uploaded" }),
       );
     } catch (error) {
       sendApiError(req, res, error);

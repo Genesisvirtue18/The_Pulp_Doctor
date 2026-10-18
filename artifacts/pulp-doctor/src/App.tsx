@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   useHealthCheck, useListLocations, useGetAvailability, useCreateAppointment, useCancelAppointment,
-  useRescheduleAppointment, useRequestReferralUpload, useCreateReferral, useAdminLogin,
+  useRescheduleAppointment, useReserveReferralUpload, useCreateReferral, useAdminLogin,
   useGetAdminSession, useAdminLogout, useGetAdminDashboard, useListAdminAppointments,
   useCreatePhoneAppointment, useCancelAdminAppointment, useRescheduleAdminAppointment,
   useListAdminReferrals, useUpdateReferralStatus, useListAdminSchedules,
@@ -184,12 +184,12 @@ type ReferralForm = Omit<ReferralInput,'selectedTeeth'|'authorizationConfirmed'|
 const initialReferral=():ReferralForm=>({referralDate:today(),dentistName:'',practiceName:'',dentistPhone:'',dentistEmail:'',patientName:'',patientPhone:'',dateOfBirth:'',selectedTeeth:[],requestType:requestOptions[1],existingRestoration:restorationOptions[0],coronalRestoration:coronalOptions[0],restorativePlan:'',clinicalComments:'',preferredDate:'',preferredTime:'',uploadIds:[],authorizationConfirmed:false});
 function ReferralPage() {
   const [form,setForm]=useState<ReferralForm>(initialReferral); const [review,setReview]=useState(false); const [done,setDone]=useState<{reference:string;message:string}|null>(null); const [error,setError]=useState('');
-  const submit=useCreateReferral(); const upload=useRequestReferralUpload();
+  const submit=useCreateReferral(); const upload=useReserveReferralUpload();
   const set=(key:keyof ReferralForm,value:unknown)=>setForm(old=>({...old,[key]:value}));
   const changeTeeth=(tooth:number)=>set('selectedTeeth',form.selectedTeeth.includes(tooth)?form.selectedTeeth.filter(t=>t!==tooth):[...form.selectedTeeth,tooth]);
   const addFile=async(file:File)=>{setError('');if(form.uploadIds.length>=5){setError('You may attach up to five files.');return}if(!['image/jpeg','image/png','image/webp','application/pdf'].includes(file.type)||file.size<1||file.size>10485760){setError('Choose a JPEG, PNG, WebP or PDF file up to 10 MB.');return}
     try {const target=await upload.mutateAsync({data:{fileName:file.name,contentType:file.type as 'image/jpeg'|'image/png'|'image/webp'|'application/pdf',fileSize:file.size}});
-      const response=await fetch(target.uploadUrl,{method:'PUT',headers:{'Content-Type':file.type},body:file}); if(!response.ok)throw new Error('The secure file transfer failed. Your referral form is unchanged.');set('uploadIds',[...form.uploadIds,target.uploadId]);
+      const response=await fetch(`/api/referral-uploads/${encodeURIComponent(target.uploadId)}/content`,{method:'PUT',headers:{'Content-Type':file.type,'x-upload-token':target.uploadToken},body:file}); if(!response.ok)throw new Error('The secure file transfer failed. Your referral form is unchanged.');set('uploadIds',[...form.uploadIds,target.uploadId]);
     } catch(e){setError(errorText(e));}};
   const submitReferral=()=>{setError('');submit.mutate({data:{...form,dateOfBirth:form.dateOfBirth||null,preferredDate:form.preferredDate||null,preferredTime:form.preferredTime||null,selectedTeeth:form.selectedTeeth as ReferralInput['selectedTeeth'],authorizationConfirmed:true}}, {onSuccess:r=>setDone({reference:r.reference,message:r.message}),onError:e=>setError(errorText(e))});};
   const requiredReady=!!form.dentistName&&!!form.practiceName&&!!form.dentistPhone&&!!form.dentistEmail&&!!form.patientName&&!!form.patientPhone&&!!form.selectedTeeth.length&&form.authorizationConfirmed;
