@@ -23,6 +23,13 @@ const COOKIE_NAME = "pulp_admin_session";
 type CookieSameSite = "strict" | "lax" | "none";
 
 function cookieSameSite(): CookieSameSite {
+  // The production frontend (vercel.app) and API (onrender.com) are on
+  // different sites, so browsers require SameSite=None for fetch cookies.
+  // cookieOptions() pairs this with Secure in production.
+  if (process.env.NODE_ENV === "production") {
+    return "none";
+  }
+
   const configured = process.env.AUTH_COOKIE_SAME_SITE?.toLowerCase();
   if (configured === "none" || configured === "lax") {
     return configured;
