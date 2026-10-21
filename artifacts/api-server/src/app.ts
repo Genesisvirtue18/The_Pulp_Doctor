@@ -10,6 +10,14 @@ import { getAllowedOrigins } from "./lib/origin";
 
 const app: Express = express();
 
+// Render terminates public traffic at its proxy and supplies the client IP in
+// X-Forwarded-For. Trust only the single proxy hop in the Render runtime so
+// Express rate limiters key requests by client IP without trusting arbitrary
+// forwarded headers from direct/local requests.
+if (process.env.RENDER === "true") {
+  app.set("trust proxy", 1);
+}
+
 app.disable("x-powered-by");
 app.use(helmet({ crossOriginResourcePolicy: { policy: "same-site" } }));
 app.use(
