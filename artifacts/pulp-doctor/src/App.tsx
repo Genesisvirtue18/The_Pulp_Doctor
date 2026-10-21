@@ -207,7 +207,7 @@ function ReferralPage() {
   const changeTeeth=(tooth:number)=>set('selectedTeeth',form.selectedTeeth.includes(tooth)?form.selectedTeeth.filter(t=>t!==tooth):[...form.selectedTeeth,tooth]);
   const addFile=async(file:File)=>{setError('');if(form.uploadIds.length>=5){setError('You may attach up to five files.');return}if(!['image/jpeg','image/png','image/webp','application/pdf'].includes(file.type)||file.size<1||file.size>10485760){setError('Choose a JPEG, PNG, WebP or PDF file up to 10 MB.');return}
     try {const target=await upload.mutateAsync({data:{fileName:file.name,contentType:file.type as 'image/jpeg'|'image/png'|'image/webp'|'application/pdf',fileSize:file.size}});
-      const apiBase=import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/,'')??'';
+      const apiBase=import.meta.env.PROD?'':(import.meta.env.VITE_API_BASE_URL?.trim().replace(/\/+$/,'')??'');
       const formData=new FormData();formData.append('file',file,file.name);
       const response=await fetch(`${apiBase}/api/referral-uploads/${encodeURIComponent(target.uploadId)}/content`,{method:'PUT',credentials:'include',headers:{'x-upload-token':target.uploadToken},body:formData}); if(!response.ok)throw new Error('The secure file transfer failed. Your referral form is unchanged.');set('uploadIds',[...form.uploadIds,target.uploadId]);
     } catch(e){setError(errorText(e));}};

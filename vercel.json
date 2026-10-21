@@ -4,6 +4,10 @@
   "outputDirectory": "artifacts/pulp-doctor/dist/public",
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://the-pulp-doctor.onrender.com/api/$1"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
