@@ -10,8 +10,11 @@ export type ExistingRestoration = typeof ExistingRestoration[keyof typeof Existi
 
 
 export const ExistingRestoration = {
-  'Permanent_Crown/Bridge': 'Permanent Crown/Bridge',
-  'Crown/Bridge_with_Temporary_Cement': 'Crown/Bridge with Temporary Cement',
-  Temporary_Crown: 'Temporary Crown',
-  Permanent_Crown_to_Be_Placed: 'Permanent Crown to Be Placed',
+  No_existing_restoration: 'No existing restoration',
+  Direct_restoration: 'Direct restoration',
+  Temporary_restoration: 'Temporary restoration',
+  Crown: 'Crown',
+  Post_and_core: 'Post and core',
+  Other: 'Other',
+  Unknown: 'Unknown',
 } as const;

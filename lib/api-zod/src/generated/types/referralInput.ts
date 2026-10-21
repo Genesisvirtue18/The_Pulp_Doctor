@@ -11,6 +11,7 @@ import type { ReferralInputSelectedTeethItem } from './referralInputSelectedTeet
 import type { ReferralRequestType } from './referralRequestType';
 
 export interface ReferralInput {
+  submissionId: string;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   referralDate: string;
   /**
@@ -30,6 +31,16 @@ export interface ReferralInput {
   dentistPhone: string;
   dentistEmail: string;
   /**
+     * @maxLength 80
+     * @nullable
+     */
+  dentistRegistrationNumber?: string | null;
+  /**
+     * @minLength 8
+     * @maxLength 400
+     */
+  practiceAddress: string;
+  /**
      * @minLength 2
      * @maxLength 120
      */
@@ -39,6 +50,19 @@ export interface ReferralInput {
      * @maxLength 24
      */
   patientPhone: string;
+  /** @nullable */
+  patientEmail?: string | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  patientGender?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 120
+     * @nullable
+     */
+  patientAge?: number | null;
   /**
      * @nullable
      * @pattern ^\d{4}-\d{2}-\d{2}$
@@ -46,9 +70,17 @@ export interface ReferralInput {
   dateOfBirth?: string | null;
   /** @minItems 1 */
   selectedTeeth: ReferralInputSelectedTeethItem[];
-  requestType: ReferralRequestType;
+  /** @minItems 1 */
+  requestTypes: ReferralRequestType[];
+  /**
+     * @maxLength 300
+     * @nullable
+     */
+  otherReferralReason?: string | null;
   existingRestoration: ExistingRestoration;
   coronalRestoration: CoronalRestoration;
+  /** @maxLength 4000 */
+  relevantClinicalInformation: string;
   /** @maxLength 2000 */
   restorativePlan?: string;
   /** @maxLength 4000 */

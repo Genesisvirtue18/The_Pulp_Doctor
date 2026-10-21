@@ -5,6 +5,8 @@
  * Public website, appointments, referrals, and protected clinic administration.
  * OpenAPI spec version: 0.1.0
  */
+export interface ResendWebhookPayload { [key: string]: unknown }
+
 export interface HealthStatus {
   status: string;
 }
@@ -13,7 +15,8 @@ export type NotificationStatus = typeof NotificationStatus[keyof typeof Notifica
 
 
 export const NotificationStatus = {
-  sent: 'sent',
+  accepted: 'accepted',
+  delivered: 'delivered',
   failed: 'failed',
   not_configured: 'not_configured',
 } as const;
@@ -214,31 +217,39 @@ export type ReferralRequestType = typeof ReferralRequestType[keyof typeof Referr
 
 
 export const ReferralRequestType = {
-  Endodontic_Emergency: 'Endodontic Emergency',
-  Consult_and_Treat_as_Necessary: 'Consult and Treat as Necessary',
-  'Endodontic_Treatment_Initiated_—_Please_Complete_Treatment': 'Endodontic Treatment Initiated — Please Complete Treatment',
-  'Prognosis/Restorability_Consult': 'Prognosis/Restorability Consult',
+  Root_Canal_Treatment: 'Root Canal Treatment',
+  Root_Canal_Retreatment: 'Root Canal Retreatment',
+  Persistent_pain_or_symptoms: 'Persistent pain or symptoms',
+  Complex_endodontic_case: 'Complex endodontic case',
+  Dental_trauma: 'Dental trauma',
+  Tooth_fracture: 'Tooth fracture',
+  Endodontic_assessment_or_second_opinion: 'Endodontic assessment or second opinion',
+  Other: 'Other',
 } as const;
 
 export type ExistingRestoration = typeof ExistingRestoration[keyof typeof ExistingRestoration];
 
 
 export const ExistingRestoration = {
-  'Permanent_Crown/Bridge': 'Permanent Crown/Bridge',
-  'Crown/Bridge_with_Temporary_Cement': 'Crown/Bridge with Temporary Cement',
-  Temporary_Crown: 'Temporary Crown',
-  Permanent_Crown_to_Be_Placed: 'Permanent Crown to Be Placed',
+  No_existing_restoration: 'No existing restoration',
+  Direct_restoration: 'Direct restoration',
+  Temporary_restoration: 'Temporary restoration',
+  Crown: 'Crown',
+  Post_and_core: 'Post and core',
+  Other: 'Other',
+  Unknown: 'Unknown',
 } as const;
 
 export type CoronalRestoration = typeof CoronalRestoration[keyof typeof CoronalRestoration];
 
 
 export const CoronalRestoration = {
-  'Core_Build-up': 'Core Build-up',
-  Place_Post_and_Resin_Core: 'Place Post and Resin Core',
-  Restore_as_Desired: 'Restore as Desired',
-  Please_Call_to_Discuss: 'Please Call to Discuss',
+  Direct_restoration: 'Direct restoration',
+  'Full-coverage_crown': 'Full-coverage crown',
+  Onlay_or_overlay: 'Onlay or overlay',
   'Fiber-Reinforced_Restoration': 'Fiber-Reinforced Restoration',
+  Other: 'Other',
+  To_be_decided_after_clinical_assessment: 'To be decided after clinical assessment',
 } as const;
 
 export type ReferralInputSelectedTeethItem = typeof ReferralInputSelectedTeethItem[keyof typeof ReferralInputSelectedTeethItem];
@@ -280,6 +291,7 @@ export const ReferralInputSelectedTeethItem = {
 } as const;
 
 export interface ReferralInput {
+  submissionId: string;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   referralDate: string;
   /**
@@ -299,6 +311,16 @@ export interface ReferralInput {
   dentistPhone: string;
   dentistEmail: string;
   /**
+     * @maxLength 80
+     * @nullable
+     */
+  dentistRegistrationNumber?: string | null;
+  /**
+     * @minLength 8
+     * @maxLength 400
+     */
+  practiceAddress: string;
+  /**
      * @minLength 2
      * @maxLength 120
      */
@@ -308,6 +330,19 @@ export interface ReferralInput {
      * @maxLength 24
      */
   patientPhone: string;
+  /** @nullable */
+  patientEmail?: string | null;
+  /**
+     * @maxLength 40
+     * @nullable
+     */
+  patientGender?: string | null;
+  /**
+     * @minimum 0
+     * @maximum 120
+     * @nullable
+     */
+  patientAge?: number | null;
   /**
      * @nullable
      * @pattern ^\d{4}-\d{2}-\d{2}$
@@ -315,9 +350,17 @@ export interface ReferralInput {
   dateOfBirth?: string | null;
   /** @minItems 1 */
   selectedTeeth: ReferralInputSelectedTeethItem[];
-  requestType: ReferralRequestType;
+  /** @minItems 1 */
+  requestTypes: ReferralRequestType[];
+  /**
+     * @maxLength 300
+     * @nullable
+     */
+  otherReferralReason?: string | null;
   existingRestoration: ExistingRestoration;
   coronalRestoration: CoronalRestoration;
+  /** @maxLength 4000 */
+  relevantClinicalInformation: string;
   /** @maxLength 2000 */
   restorativePlan?: string;
   /** @maxLength 4000 */
@@ -332,6 +375,41 @@ export interface ReferralInput {
   /** @maxItems 5 */
   uploadIds?: string[];
   authorizationConfirmed: true;
+}
+
+export interface ContactMessageInput {
+  /**
+     * @minLength 2
+     * @maxLength 120
+     */
+  name: string;
+  email: string;
+  /**
+     * @maxLength 24
+     * @nullable
+     */
+  phone?: string | null;
+  /**
+     * @minLength 10
+     * @maxLength 2000
+     */
+  message: string;
+}
+
+export interface ContactMessageConfirmation {
+  reference: string;
+  emailStatus: NotificationStatus;
+}
+
+export interface ContactMessage {
+  id: string;
+  reference: string;
+  name: string;
+  email: string;
+  /** @nullable */
+  phone: string | null;
+  message: string;
+  createdAt: string;
 }
 
 export type ReferralStatus = typeof ReferralStatus[keyof typeof ReferralStatus];
@@ -395,8 +473,18 @@ export interface AdminDashboard {
   nextAppointments: AdminAppointment[];
 }
 
+export type AdminNotificationEntityType = typeof AdminNotificationEntityType[keyof typeof AdminNotificationEntityType];
+
+
+export const AdminNotificationEntityType = {
+  appointment: 'appointment',
+  referral: 'referral',
+  contact: 'contact',
+} as const;
+
 export interface AdminNotification {
   id: string;
+  entityType: AdminNotificationEntityType;
   event: string;
   recipient: string;
   entityReference: string;
@@ -411,6 +499,11 @@ export interface ReferralAttachmentAccess {
   url: string;
   expiresAt: string;
 }
+
+export const AdminActionInputValue = {
+  confirmed: true,
+} as const;
+export type AdminActionInput = typeof AdminActionInputValue;
 
 export interface PhoneAppointmentInput {
   /** @minLength 1 */
@@ -458,13 +551,47 @@ export interface AdminRescheduleInput {
   slotId: string;
 }
 
-export type AdminReferral = ReferralInput & {
+export interface AdminReferral {
   id: string;
   reference: string;
+  submissionId?: string;
+  referralDate?: string;
+  dentistName: string;
+  practiceName: string;
+  dentistPhone?: string;
+  dentistEmail?: string;
+  /** @nullable */
+  dentistRegistrationNumber?: string | null;
+  practiceAddress?: string;
+  patientName: string;
+  patientPhone?: string;
+  /** @nullable */
+  patientEmail?: string | null;
+  /** @nullable */
+  patientGender?: string | null;
+  /** @nullable */
+  patientAge?: number | null;
+  /** @nullable */
+  dateOfBirth?: string | null;
+  selectedTeeth: number[];
+  requestTypes: ReferralRequestType[];
+  /** @nullable */
+  otherReferralReason?: string | null;
+  existingRestoration?: ExistingRestoration;
+  coronalRestoration?: CoronalRestoration;
+  relevantClinicalInformation?: string;
+  restorativePlan?: string;
+  clinicalComments?: string;
+  /** @nullable */
+  preferredDate?: string | null;
+  /** @nullable */
+  preferredTime?: string | null;
+  uploadIds: string[];
+  authorizationConfirmed?: boolean;
   status: ReferralStatus;
   createdAt: string;
   internalNotes: string;
-};
+}
 
 export interface ReferralStatusInput {
   status: ReferralStatus;

@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { Router, type IRouter } from "express";
 import {
   AdminLoginBody,
@@ -7,14 +7,19 @@ import {
   CancelAdminAppointmentBody,
   CancelAdminAppointmentParams,
   CancelAdminAppointmentResponse,
+  CompleteAdminAppointmentBody,
+  CompleteAdminAppointmentParams,
+  CompleteAdminAppointmentResponse,
   CreateAdminAvailabilityOverrideBody,
   CreateAdminAvailabilityOverrideResponse,
+  DeleteAdminAvailabilityOverrideParams,
   CreatePhoneAppointmentBody,
   CreatePhoneAppointmentResponse,
   GetAdminDashboardResponse,
   GetAdminSessionResponse,
   ListAdminAppointmentsQueryParams,
   ListAdminAppointmentsResponse,
+  ListAdminContactMessagesResponse,
   ListAdminAvailabilityOverridesQueryParams,
   ListAdminAvailabilityOverridesResponse,
   ListAdminNotificationsResponse,
@@ -38,6 +43,7 @@ import {
 } from "@workspace/api-zod";
 import { connectMongo } from "../lib/mongo";
 import { sendApiError } from "../lib/httpErrors";
+import { sortClinicLocations } from "../services/clinic";
 import {
   clearAdminSessionCookie,
   requireAdmin,
@@ -47,6 +53,7 @@ import {
 import { AdminUserModel } from "../models/admin";
 import { AppointmentModel } from "../models/appointment";
 import { AvailabilityOverrideModel } from "../models/availability";
+import { ContactMessageModel } from "../models/contactMessage";
 import {
   ClinicLocationModel,
   DoctorScheduleModel,
@@ -67,6 +74,12 @@ const router: IRouter = Router();
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 5,
+  // Bump the key namespace to discard counters from the previous limiter
+  // configuration, which may have already locked out this development IP.
+  keyGenerator: (req) => `admin-login-v2:${ipKeyGenerator(req.ip ?? "")}`,
+  // Only failed sign-ins should consume the attempt budget. Otherwise a user
+  // who signs in successfully can be locked out by routine subsequent logins.
+  skipSuccessfulRequests: true,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: "Too many sign-in attempts. Try again later." },
@@ -91,18 +104,27 @@ function localDateInKolkata(): string {
 function toReferral(referral: {
   _id: unknown;
   reference: string;
+  submissionId?: string;
   referralDate: string;
   dentistName: string;
   practiceName: string;
   dentistPhone: string;
   dentistEmail: string;
+  dentistRegistrationNumber?: string | null;
+  practiceAddress?: string;
   patientName: string;
   patientPhone: string;
+  patientEmail?: string | null;
+  patientGender?: string | null;
+  patientAge?: number | null;
   dateOfBirth?: string | null;
   selectedTeeth: number[];
-  requestType: string;
+  requestTypes?: string[];
+  requestType?: string;
+  otherReferralReason?: string | null;
   existingRestoration: string;
   coronalRestoration: string;
+  relevantClinicalInformation?: string;
   restorativePlan: string;
   clinicalComments: string;
   preferredDate?: string | null;
@@ -116,18 +138,26 @@ function toReferral(referral: {
   return {
     id: String(referral._id),
     reference: referral.reference,
+    submissionId: referral.submissionId ?? String(referral._id),
     referralDate: referral.referralDate,
     dentistName: referral.dentistName,
     practiceName: referral.practiceName,
     dentistPhone: referral.dentistPhone,
     dentistEmail: referral.dentistEmail,
+    dentistRegistrationNumber: referral.dentistRegistrationNumber ?? null,
+    practiceAddress: referral.practiceAddress ?? "",
     patientName: referral.patientName,
     patientPhone: referral.patientPhone,
+    patientEmail: referral.patientEmail ?? null,
+    patientGender: referral.patientGender ?? null,
+    patientAge: referral.patientAge ?? null,
     dateOfBirth: referral.dateOfBirth ?? null,
     selectedTeeth: referral.selectedTeeth,
-    requestType: referral.requestType,
+    requestTypes: referral.requestTypes ?? (referral.requestType ? [referral.requestType] : []),
+    otherReferralReason: referral.otherReferralReason ?? null,
     existingRestoration: referral.existingRestoration,
     coronalRestoration: referral.coronalRestoration,
+    relevantClinicalInformation: referral.relevantClinicalInformation ?? "",
     restorativePlan: referral.restorativePlan,
     clinicalComments: referral.clinicalComments,
     preferredDate: referral.preferredDate ?? null,
@@ -147,6 +177,7 @@ function toAdminNotification(notification: {
   event: string;
   recipient: string;
   entityReference: string;
+  entityType: "appointment" | "referral" | "contact";
   status: string;
   attempts: number;
   lastError: string | null;
@@ -154,12 +185,13 @@ function toAdminNotification(notification: {
 }) {
   return {
     id: String(notification._id),
+    entityType: notification.entityType,
     event: notification.event,
     recipient: notification.recipient,
     entityReference: notification.entityReference,
-    status: notification.status,
     attempts: notification.attempts,
     lastError: notification.lastError,
+    status: notification.status === "sent" ? "accepted" : notification.status,
     updatedAt: notification.updatedAt?.toISOString() ?? new Date().toISOString(),
   };
 }
@@ -416,6 +448,41 @@ router.post(
   },
 );
 
+router.post(
+  "/appointments/:appointmentId/complete",
+  async (req, res): Promise<void> => {
+    const params = CompleteAdminAppointmentParams.safeParse(req.params);
+    const body = CompleteAdminAppointmentBody.safeParse(req.body);
+    if (!params.success || !body.success || body.data.confirmed !== true) {
+      res.status(400).json({ error: "Confirm appointment completion to continue." });
+      return;
+    }
+    try {
+      await connectMongo();
+      const now = new Date();
+      const appointment = await AppointmentModel.findOneAndUpdate(
+        {
+          _id: params.data.appointmentId,
+          status: { $in: ["pending", "confirmed"] },
+          endsAt: { $lte: now },
+        },
+        {
+          $set: { status: "completed" },
+          $unset: { reservationKey: 1, reservationBuckets: 1 },
+        },
+        { new: true, runValidators: true },
+      );
+      if (!appointment) {
+        res.status(409).json({ error: "Only a past active appointment can be marked complete." });
+        return;
+      }
+      res.json(CompleteAdminAppointmentResponse.parse(toAdminAppointment(appointment)));
+    } catch (error) {
+      sendApiError(req, res, error);
+    }
+  },
+);
+
 router.get("/referrals", async (req, res): Promise<void> => {
   const parsed = ListAdminReferralsQueryParams.safeParse(req.query);
   if (!parsed.success) {
@@ -519,7 +586,7 @@ router.get("/schedules", async (req, res): Promise<void> => {
   try {
     await connectMongo();
     const [locations, schedules] = await Promise.all([
-      ClinicLocationModel.find({ active: true }).sort({ name: 1 }).lean(),
+      ClinicLocationModel.find({ active: true }).lean(),
       DoctorScheduleModel.find().lean(),
     ]);
     const scheduleByLocation = new Map(
@@ -527,7 +594,7 @@ router.get("/schedules", async (req, res): Promise<void> => {
     );
     res.json(
       ListAdminSchedulesResponse.parse(
-        locations.map((location) => {
+        sortClinicLocations(locations).map((location) => {
           const schedule = scheduleByLocation.get(location.locationId);
           return {
             locationId: location.locationId,
@@ -668,6 +735,49 @@ router.get("/availability-overrides", async (req, res): Promise<void> => {
         })),
       ),
     );
+  } catch (error) {
+    sendApiError(req, res, error);
+  }
+});
+
+router.delete(
+  "/availability-overrides/:overrideId",
+  async (req, res): Promise<void> => {
+    const params = DeleteAdminAvailabilityOverrideParams.safeParse(req.params);
+    if (!params.success) {
+      res.status(400).json({ error: "Availability override reference is invalid." });
+      return;
+    }
+    try {
+      await connectMongo();
+      const deleted = await AvailabilityOverrideModel.findByIdAndDelete(params.data.overrideId);
+      if (!deleted) {
+        res.status(404).json({ error: "Availability override was not found." });
+        return;
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      sendApiError(req, res, error);
+    }
+  },
+);
+
+router.get("/contact-messages", async (req, res): Promise<void> => {
+  try {
+    await connectMongo();
+    const messages = await ContactMessageModel.find()
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+    res.json(ListAdminContactMessagesResponse.parse(messages.map((message) => ({
+      id: String(message._id),
+      reference: message.reference,
+      name: message.name,
+      email: message.email,
+      phone: message.phone,
+      message: message.message,
+      createdAt: message.createdAt,
+    }))));
   } catch (error) {
     sendApiError(req, res, error);
   }

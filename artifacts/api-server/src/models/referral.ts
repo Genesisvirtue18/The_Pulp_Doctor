@@ -20,19 +20,28 @@ export interface ReferralAttachmentMetadata {
 }
 
 export interface ReferralDocument extends Document {
+  submissionId?: string;
   reference: string;
   referralDate: string;
   dentistName: string;
   practiceName: string;
   dentistPhone: string;
   dentistEmail: string;
+  dentistRegistrationNumber?: string | null;
+  practiceAddress?: string;
   patientName: string;
   patientPhone: string;
+  patientEmail?: string | null;
+  patientGender?: string | null;
+  patientAge?: number | null;
   dateOfBirth?: string | null;
   selectedTeeth: number[];
-  requestType: string;
+  requestTypes?: string[];
+  requestType?: string;
+  otherReferralReason?: string | null;
   existingRestoration: string;
   coronalRestoration: string;
+  relevantClinicalInformation?: string;
   restorativePlan: string;
   clinicalComments: string;
   preferredDate?: string | null;
@@ -44,6 +53,8 @@ export interface ReferralDocument extends Document {
 }
 
 export interface ReferralUploadDocument extends Document {
+  createdAt: Date;
+  updatedAt: Date;
   uploadId: string;
   uploadTokenHash: string | null;
   cloudinaryPublicId: string;
@@ -74,19 +85,28 @@ const referralAttachmentSchema = new Schema<ReferralAttachmentMetadata>(
 
 const referralSchema = new Schema<ReferralDocument>(
   {
+    submissionId: { type: String, required: true, unique: true, index: true },
     reference: { type: String, required: true, unique: true, index: true },
     referralDate: { type: String, required: true },
     dentistName: { type: String, required: true },
     practiceName: { type: String, required: true },
     dentistPhone: { type: String, required: true },
     dentistEmail: { type: String, required: true, index: true },
+    dentistRegistrationNumber: { type: String, default: null },
+    practiceAddress: { type: String, required: true },
     patientName: { type: String, required: true },
     patientPhone: { type: String, required: true },
+    patientEmail: { type: String, default: null },
+    patientGender: { type: String, default: null },
+    patientAge: { type: Number, default: null, min: 0, max: 120 },
     dateOfBirth: { type: String, default: null },
     selectedTeeth: { type: [Number], required: true },
-    requestType: { type: String, required: true },
+    requestTypes: { type: [String], required: true },
+    requestType: { type: String, default: undefined },
+    otherReferralReason: { type: String, default: null },
     existingRestoration: { type: String, required: true },
     coronalRestoration: { type: String, required: true },
+    relevantClinicalInformation: { type: String, default: "" },
     restorativePlan: { type: String, default: "" },
     clinicalComments: { type: String, default: "" },
     preferredDate: { type: String, default: null },

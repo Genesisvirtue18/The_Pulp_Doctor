@@ -12,6 +12,21 @@ import {
 } from "../models/clinic";
 
 const TIMEZONE_OFFSET_MINUTES = 330;
+export const CLINIC_LOCATION_ORDER = [
+  "gurugram-jcm",
+  "model-town-delhi",
+  "karol-bagh-delhi",
+] as const;
+
+export function sortClinicLocations<T extends { locationId: string }>(locations: T[]): T[] {
+  const position = new Map<string, number>(
+    CLINIC_LOCATION_ORDER.map((locationId, index) => [locationId, index]),
+  );
+  return locations.sort(
+    (a, b) => (position.get(a.locationId) ?? Number.MAX_SAFE_INTEGER) -
+      (position.get(b.locationId) ?? Number.MAX_SAFE_INTEGER),
+  );
+}
 
 export class ClinicNotFoundError extends Error {}
 export class SlotUnavailableError extends Error {}
@@ -194,9 +209,9 @@ async function resolvePublishedSlots(
 
 export async function listLocations() {
   await connectMongo();
-  const locations = await ClinicLocationModel.find({ active: true })
-    .sort({ name: 1 })
-    .lean();
+  const locations = sortClinicLocations(
+    await ClinicLocationModel.find({ active: true }).lean(),
+  );
   const schedules = await DoctorScheduleModel.find({
     locationId: { $in: locations.map((location) => location.locationId) },
   }).lean();

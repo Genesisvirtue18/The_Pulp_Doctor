@@ -10,9 +10,10 @@ export type CoronalRestoration = typeof CoronalRestoration[keyof typeof CoronalR
 
 
 export const CoronalRestoration = {
-  'Core_Build-up': 'Core Build-up',
-  Place_Post_and_Resin_Core: 'Place Post and Resin Core',
-  Restore_as_Desired: 'Restore as Desired',
-  Please_Call_to_Discuss: 'Please Call to Discuss',
+  Direct_restoration: 'Direct restoration',
+  'Full-coverage_crown': 'Full-coverage crown',
+  Onlay_or_overlay: 'Onlay or overlay',
   'Fiber-Reinforced_Restoration': 'Fiber-Reinforced Restoration',
+  Other: 'Other',
+  To_be_decided_after_clinical_assessment: 'To be decided after clinical assessment',
 } as const;

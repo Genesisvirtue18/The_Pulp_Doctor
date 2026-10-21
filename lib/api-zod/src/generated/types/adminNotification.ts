@@ -5,10 +5,12 @@
  * Public website, appointments, referrals, and protected clinic administration.
  * OpenAPI spec version: 0.1.0
  */
+import type { AdminNotificationEntityType } from './adminNotificationEntityType';
 import type { NotificationStatus } from './notificationStatus';
 
 export interface AdminNotification {
   id: string;
+  entityType: AdminNotificationEntityType;
   event: string;
   recipient: string;
   entityReference: string;

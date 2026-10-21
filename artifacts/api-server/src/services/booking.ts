@@ -29,6 +29,20 @@ function hashManagementToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+const RESERVATION_BUCKET_MS = 15 * 60 * 1000;
+
+export function reservationBucketKeys(startsAt: Date, endsAt: Date): string[] {
+  const buckets: string[] = [];
+  for (
+    let bucket = Math.floor(startsAt.getTime() / RESERVATION_BUCKET_MS);
+    bucket * RESERVATION_BUCKET_MS < endsAt.getTime();
+    bucket += 1
+  ) {
+    buckets.push(String(bucket));
+  }
+  return buckets;
+}
+
 function managementTokenMatches(token: string, expectedHash: string | null): boolean {
   if (!expectedHash) {
     return false;
@@ -63,9 +77,15 @@ async function createReservation(
         session,
       );
       const reservationKey = `${input.date}:${input.slotId}`;
-      const existing = await AppointmentModel.exists({ reservationKey }).session(
-        session,
+      const reservationBuckets = reservationBucketKeys(
+        published.startsAt,
+        published.endsAt,
       );
+      const existing = await AppointmentModel.exists({
+        status: { $in: ["pending", "confirmed"] },
+        startsAt: { $lt: published.endsAt },
+        endsAt: { $gt: published.startsAt },
+      }).session(session);
       if (existing) {
         throw new SlotUnavailableError(
           "This appointment time has just been reserved. Choose another time.",
@@ -93,6 +113,7 @@ async function createReservation(
               ? hashManagementToken(managementToken)
               : null,
             reservationKey,
+            reservationBuckets,
           },
         ],
         { session },
@@ -178,7 +199,7 @@ async function updateReservation(
           },
           {
             $set: { status: "cancelled" },
-            $unset: { reservationKey: 1 },
+            $unset: { reservationKey: 1, reservationBuckets: 1 },
           },
           { new: true, session, runValidators: true },
         );
@@ -194,6 +215,21 @@ async function updateReservation(
         target.slotId,
         session,
       );
+      const reservationBuckets = reservationBucketKeys(
+        published.startsAt,
+        published.endsAt,
+      );
+      const overlapping = await AppointmentModel.exists({
+        _id: { $ne: current._id },
+        status: { $in: ["pending", "confirmed"] },
+        startsAt: { $lt: published.endsAt },
+        endsAt: { $gt: published.startsAt },
+      }).session(session);
+      if (overlapping) {
+        throw new SlotUnavailableError(
+          "This appointment time overlaps another reservation. Choose another time.",
+        );
+      }
       updated = await AppointmentModel.findOneAndUpdate(
         {
           _id: current._id,
@@ -208,6 +244,7 @@ async function updateReservation(
             startsAt: published.startsAt,
             endsAt: published.endsAt,
             reservationKey: `${target.date}:${target.slotId}`,
+            reservationBuckets,
           },
         },
         { new: true, session, runValidators: true },

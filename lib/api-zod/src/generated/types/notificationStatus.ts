@@ -10,7 +10,8 @@ export type NotificationStatus = typeof NotificationStatus[keyof typeof Notifica
 
 
 export const NotificationStatus = {
-  sent: 'sent',
+  accepted: 'accepted',
+  delivered: 'delivered',
   failed: 'failed',
   not_configured: 'not_configured',
 } as const;

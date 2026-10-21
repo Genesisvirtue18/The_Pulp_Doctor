@@ -9,6 +9,8 @@ import multer, { MulterError } from "multer";
 import rateLimit from "express-rate-limit";
 import mongoose from "mongoose";
 import {
+  CreateContactMessageBody,
+  CreateContactMessageResponse,
   CancelAppointmentBody,
   CancelAppointmentParams,
   CancelAppointmentResponse,
@@ -33,9 +35,11 @@ import {
   ReferralUploadModel,
   type ReferralAttachmentMetadata,
 } from "../models/referral";
+import { ContactMessageModel } from "../models/contactMessage";
+import { EmailNotificationModel } from "../models/notification";
 import { createOnlineAppointment, cancelByPatient, isBookingConflict, rescheduleByPatient, toAppointmentSummary } from "../services/booking";
 import { getAvailability, listLocations } from "../services/clinic";
-import { notifyReferral } from "../services/email";
+import { notifyContactMessage, notifyReferral, recordResendWebhook } from "../services/email";
 import {
   createReferralPublicId,
   deleteReferralAsset,
@@ -58,24 +62,80 @@ const intakeFileUpload = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 0 },
 }).single("file");
 const referralRequestKinds = [
-  "Endodontic Emergency",
-  "Consult and Treat as Necessary",
-  "Endodontic Treatment Initiated — Please Complete Treatment",
-  "Prognosis/Restorability Consult",
+  "Root Canal Treatment",
+  "Root Canal Retreatment",
+  "Persistent pain or symptoms",
+  "Complex endodontic case",
+  "Dental trauma",
+  "Tooth fracture",
+  "Endodontic assessment or second opinion",
+  "Other",
 ];
 const restorationKinds = [
-  "Permanent Crown/Bridge",
-  "Crown/Bridge with Temporary Cement",
-  "Temporary Crown",
-  "Permanent Crown to Be Placed",
+  "No existing restoration",
+  "Direct restoration",
+  "Temporary restoration",
+  "Crown",
+  "Post and core",
+  "Other",
+  "Unknown",
 ];
 const coronalRestorationKinds = [
-  "Core Build-up",
-  "Place Post and Resin Core",
-  "Restore as Desired",
-  "Please Call to Discuss",
+  "Direct restoration",
+  "Full-coverage crown",
+  "Onlay or overlay",
   "Fiber-Reinforced Restoration",
+  "Other",
+  "To be decided after clinical assessment",
 ];
+
+router.post("/contact", async (req, res): Promise<void> => {
+  const parsed = CreateContactMessageBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Enter your name, a valid email address, and a message." });
+    return;
+  }
+  try {
+    await connectMongo();
+    const message = await ContactMessageModel.create({
+      reference: `MSG-${randomUUID().slice(0, 8).toUpperCase()}`,
+      name: parsed.data.name.trim(),
+      email: parsed.data.email.trim().toLowerCase(),
+      phone: parsed.data.phone?.trim() || null,
+      message: parsed.data.message.trim(),
+    });
+    let emailStatus: "accepted" | "delivered" | "failed" | "not_configured" = "failed";
+    try {
+      emailStatus = await notifyContactMessage(message);
+    } catch (error) {
+      req.log.error({ errorName: error instanceof Error ? error.name : "UnknownError" }, "Contact notification failed");
+    }
+    res.status(201).json(CreateContactMessageResponse.parse({
+      reference: message.reference,
+      emailStatus,
+    }));
+  } catch (error) {
+    sendApiError(req, res, error);
+  }
+});
+
+router.post("/webhooks/resend", async (req, res): Promise<void> => {
+  const rawBody = (req as Request & { rawBody?: string }).rawBody;
+  const id = req.get("svix-id");
+  const timestamp = req.get("svix-timestamp");
+  const signature = req.get("svix-signature");
+  if (!rawBody || !id || !timestamp || !signature) {
+    res.status(400).json({ error: "Resend webhook signature headers are required." });
+    return;
+  }
+  try {
+    await recordResendWebhook(rawBody, { id, timestamp, signature });
+    res.sendStatus(204);
+  } catch (error) {
+    req.log.warn({ errorName: error instanceof Error ? error.name : "UnknownError" }, "Rejected Resend webhook");
+    res.status(400).json({ error: "Resend webhook signature or event is invalid." });
+  }
+});
 
 router.get("/locations", async (req, res): Promise<void> => {
   try {
@@ -374,7 +434,12 @@ router.put(
       }
       if (!savedReservation) {
         await deleteReferralAsset(cloudinaryAsset.cloudinaryPublicId).catch(
-          () => undefined,
+          (cleanupError: unknown) => {
+            req.log.error(
+              { errorName: cleanupError instanceof Error ? cleanupError.name : "UnknownError" },
+              "Could not remove a Cloudinary upload with an expired reservation",
+            );
+          },
         );
         res.status(409).json({ error: "This upload authorization is no longer valid." });
         return;
@@ -396,7 +461,8 @@ router.post("/referrals", async (req, res): Promise<void> => {
   }
   const input = parsed.data;
   if (
-    !referralRequestKinds.includes(input.requestType) ||
+    input.requestTypes.some((requestType) => !referralRequestKinds.includes(requestType)) ||
+    (input.requestTypes.includes("Other") && !input.otherReferralReason?.trim()) ||
     !restorationKinds.includes(input.existingRestoration) ||
     !coronalRestorationKinds.includes(input.coronalRestoration) ||
     input.authorizationConfirmed !== true
@@ -407,6 +473,24 @@ router.post("/referrals", async (req, res): Promise<void> => {
 
   try {
     await connectMongo();
+    const existingSubmission = await ReferralModel.findOne({
+      submissionId: input.submissionId,
+    });
+    if (existingSubmission) {
+      const previousReceipt = await EmailNotificationModel.findOne({
+        entityType: "referral",
+        entityId: String(existingSubmission._id),
+        event: "referral.dentist_receipt",
+      }).select("status");
+      res.status(201).json(CreateReferralResponse.parse({
+        id: String(existingSubmission._id),
+        reference: existingSubmission.reference,
+        status: existingSubmission.status,
+        message: "Referral received. This confirms submission only, not acceptance or appointment confirmation.",
+        emailStatus: previousReceipt?.status ?? "not_configured",
+      }));
+      return;
+    }
     const uploadIds = input.uploadIds ?? [];
     const uploads = uploadIds.length
       ? await ReferralUploadModel.find({
@@ -467,19 +551,27 @@ router.post("/referrals", async (req, res): Promise<void> => {
         const [created] = await ReferralModel.create(
           [
             {
+              submissionId: input.submissionId,
               reference: `REF-${randomUUID().slice(0, 8).toUpperCase()}`,
               referralDate: input.referralDate,
               dentistName: input.dentistName.trim(),
               practiceName: input.practiceName.trim(),
               dentistPhone: input.dentistPhone.trim(),
               dentistEmail: input.dentistEmail.trim().toLowerCase(),
+              dentistRegistrationNumber: input.dentistRegistrationNumber?.trim() || null,
+              practiceAddress: input.practiceAddress.trim(),
               patientName: input.patientName.trim(),
               patientPhone: input.patientPhone.trim(),
+              patientEmail: input.patientEmail?.trim().toLowerCase() || null,
+              patientGender: input.patientGender?.trim() || null,
+              patientAge: input.patientAge ?? null,
               dateOfBirth: input.dateOfBirth ?? null,
               selectedTeeth: input.selectedTeeth,
-              requestType: input.requestType,
+              requestTypes: input.requestTypes,
+              otherReferralReason: input.otherReferralReason?.trim() || null,
               existingRestoration: input.existingRestoration,
               coronalRestoration: input.coronalRestoration,
+              relevantClinicalInformation: input.relevantClinicalInformation.trim(),
               restorativePlan: input.restorativePlan?.trim() ?? "",
               clinicalComments: input.clinicalComments?.trim() ?? "",
               preferredDate: input.preferredDate ?? null,
@@ -516,15 +608,15 @@ router.post("/referrals", async (req, res): Promise<void> => {
       throw new Error("Referral submission did not complete.");
     }
 
-    let emailStatus: "sent" | "failed" | "not_configured" = "failed";
+    let emailStatus: "accepted" | "delivered" | "failed" | "not_configured" = "failed";
     try {
       emailStatus = await notifyReferral({
         _id: referral._id,
         reference: referral.reference,
         dentistEmail: referral.dentistEmail,
       });
-    } catch {
-      // The referral is saved; failed email notification is recorded separately.
+    } catch (error) {
+      req.log.error({ errorName: error instanceof Error ? error.name : "UnknownError" }, "Referral notification failed");
     }
     res.status(201).json(
       CreateReferralResponse.parse({

@@ -1,13 +1,15 @@
 import { createHash } from "node:crypto";
+import { Resend } from "resend";
 import { AppointmentModel } from "../models/appointment";
+import { ContactMessageModel } from "../models/contactMessage";
 import { EmailNotificationModel } from "../models/notification";
 import { ReferralModel } from "../models/referral";
 import { logger } from "../lib/logger";
 
-export type NotificationStatus = "sent" | "failed" | "not_configured";
+export type NotificationStatus = "accepted" | "delivered" | "failed" | "not_configured";
 
 interface NotificationRequest {
-  entityType: "appointment" | "referral";
+  entityType: "appointment" | "referral" | "contact";
   entityId: string;
   entityReference: string;
   event: string;
@@ -23,6 +25,17 @@ function notificationKey(input: NotificationRequest): string {
 async function notificationMessage(
   notification: NotificationRequest,
 ): Promise<{ subject: string; html: string; text: string }> {
+  if (notification.entityType === "contact") {
+    const contact = await ContactMessageModel.findById(notification.entityId);
+    if (!contact) {
+      throw new Error("Contact message for notification was not found.");
+    }
+    return {
+      subject: `Website contact message · ${contact.reference}`,
+      text: `A website contact message was received from ${contact.name}. Reference ${contact.reference}. Review the protected admin dashboard for details.`,
+      html: `<p>A website contact message was received.</p><p>Reference: <strong>${escapeHtml(contact.reference)}</strong></p><p>Review details in the protected admin dashboard.</p>`,
+    };
+  }
   if (notification.entityType === "appointment") {
     const appointment = await AppointmentModel.findById(notification.entityId);
     if (!appointment) {
@@ -96,8 +109,15 @@ async function deliver(
   if (!current) {
     throw new Error("Email notification record was not found.");
   }
-  if (current.status === "sent") {
-    return "sent";
+  if ((current.status as string) === "sent") {
+    await EmailNotificationModel.updateOne(
+      { _id: id },
+      { $set: { status: "accepted" } },
+    );
+    return "accepted";
+  }
+  if (current.status === "accepted" || current.status === "delivered") {
+    return current.status;
   }
 
   const apiKey = process.env.RESEND_API_KEY;
@@ -121,7 +141,7 @@ async function deliver(
   const claimed = await EmailNotificationModel.findOneAndUpdate(
     {
       _id: id,
-      status: { $ne: "sent" },
+      status: { $nin: ["accepted", "delivered"] },
       $or: [
         { retryLockUntil: null },
         { retryLockUntil: { $exists: false } },
@@ -142,24 +162,26 @@ async function deliver(
 
   try {
     const message = await notificationMessage(notification);
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "Idempotency-Key": claimed.idempotencyKey,
-      },
-      body: JSON.stringify({ from, to: [notification.recipient], ...message }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) {
-      throw new Error(`Email provider returned HTTP ${response.status}.`);
+    const resend = new Resend(apiKey);
+    const response = await resend.emails.send(
+      { from, to: [notification.recipient], ...message },
+      { idempotencyKey: claimed.idempotencyKey },
+    );
+    if (response.error || !response.data?.id) {
+      throw new Error(response.error?.message ?? "Email provider did not accept the message.");
     }
     await EmailNotificationModel.updateOne(
       { _id: id },
-      { $set: { status: "sent", lastError: null, retryLockUntil: null } },
+      {
+        $set: {
+          status: "accepted",
+          providerMessageId: response.data.id,
+          lastError: null,
+          retryLockUntil: null,
+        },
+      },
     );
-    return "sent";
+    return "accepted";
   } catch (error) {
     const safeMessage =
       error instanceof Error && error.message.includes("HTTP ")
@@ -206,8 +228,15 @@ export async function retryNotification(
   if (!record) {
     return null;
   }
-  if (record.status === "sent") {
-    return "sent";
+  if ((record.status as string) === "sent") {
+    await EmailNotificationModel.updateOne(
+      { _id: record._id },
+      { $set: { status: "accepted" } },
+    );
+    return "accepted";
+  }
+  if (record.status === "accepted" || record.status === "delivered") {
+    return record.status;
   }
   if (record.status === "not_configured" && (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM)) {
     return "not_configured";
@@ -279,4 +308,50 @@ export async function notifyReferral(referral: {
     recipient: referral.dentistEmail,
   });
   return receipt.status;
+}
+
+export async function notifyContactMessage(contact: {
+  _id: unknown;
+  reference: string;
+}): Promise<NotificationStatus> {
+  return (
+    await sendNotification({
+      entityType: "contact",
+      entityId: String(contact._id),
+      entityReference: contact.reference,
+      event: "contact.doctor_new",
+      recipient: process.env.DOCTOR_EMAIL || "drcharu.25@gmail.com",
+    })
+  ).status;
+}
+
+export async function recordResendWebhook(
+  payload: string,
+  headers: { id: string; timestamp: string; signature: string },
+): Promise<void> {
+  const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
+  if (!webhookSecret) {
+    throw new Error("Resend webhook verification is not configured.");
+  }
+  const resend = new Resend(process.env.RESEND_API_KEY);
+  const event = resend.webhooks.verify({
+    payload,
+    headers,
+    webhookSecret,
+  });
+  if (!("email_id" in event.data) || typeof event.data.email_id !== "string") {
+    throw new Error("Resend webhook event does not include an email ID.");
+  }
+  const emailId = event.data.email_id;
+  if (event.type === "email.delivered") {
+    await EmailNotificationModel.updateOne(
+      { providerMessageId: emailId },
+      { $set: { status: "delivered", lastError: null } },
+    );
+  } else if (event.type === "email.bounced" || event.type === "email.failed") {
+    await EmailNotificationModel.updateOne(
+      { providerMessageId: emailId },
+      { $set: { status: "failed", lastError: `Resend reported ${event.type}.` } },
+    );
+  }
 }

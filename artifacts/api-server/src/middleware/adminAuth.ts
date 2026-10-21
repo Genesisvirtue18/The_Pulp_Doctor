@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { connectMongo } from "../lib/mongo";
 import { AdminUserModel } from "../models/admin";
+import { getAllowedOrigins } from "../lib/origin";
 
 export interface AdminIdentity {
   id: string;
@@ -127,10 +128,7 @@ export function requireSameOrigin(
   try {
     const originUrl = new URL(origin);
     const host = req.get("host");
-    const configuredOrigins = (process.env.APP_ORIGIN ?? "")
-      .split(",")
-      .map((value) => value.trim())
-      .filter(Boolean);
+    const configuredOrigins = getAllowedOrigins();
     if (
       (configuredOrigins.length > 0 && configuredOrigins.includes(origin)) ||
       (configuredOrigins.length === 0 && host && originUrl.host === host)

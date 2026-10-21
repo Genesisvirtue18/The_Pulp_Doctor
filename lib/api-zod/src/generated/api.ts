@@ -44,6 +44,32 @@ export const ListLocationsResponse = zod.array(ListLocationsResponseItem)
 
 
 /**
+ * @summary Send a practice contact message
+ */
+export const createContactMessageBodyNameMin = 2;
+export const createContactMessageBodyNameMax = 120;
+
+export const createContactMessageBodyPhoneMax = 24;
+
+export const createContactMessageBodyMessageMin = 10;
+export const createContactMessageBodyMessageMax = 2000;
+
+
+
+export const CreateContactMessageBody = zod.object({
+  "name": zod.string().min(createContactMessageBodyNameMin).max(createContactMessageBodyNameMax),
+  "email": zod.string().email(),
+  "phone": zod.string().max(createContactMessageBodyPhoneMax).nullish(),
+  "message": zod.string().min(createContactMessageBodyMessageMin).max(createContactMessageBodyMessageMax)
+})
+
+export const CreateContactMessageResponse = zod.object({
+  "reference": zod.string(),
+  "emailStatus": zod.enum(['accepted', 'delivered', 'failed', 'not_configured'])
+})
+
+
+/**
  * @summary Get published bookable slots for a clinic and local date
  */
 export const getAvailabilityQueryDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
@@ -115,7 +141,7 @@ export const CreateAppointmentResponse = zod.object({
   "time": zod.string(),
   "status": zod.enum(['pending', 'confirmed', 'cancelled', 'completed']),
   "managementToken": zod.string().describe('Private one-time display token; store securely and never place in a URL.'),
-  "emailStatus": zod.enum(['sent', 'failed', 'not_configured'])
+  "emailStatus": zod.enum(['accepted', 'delivered', 'failed', 'not_configured'])
 })
 
 
@@ -183,6 +209,20 @@ export const RescheduleAppointmentResponse = zod.object({
 
 
 /**
+ * @summary Record verified Resend delivery events
+ */
+export const ReceiveResendWebhookHeader = zod.object({
+  "svix-id": zod.string(),
+  "svix-timestamp": zod.string(),
+  "svix-signature": zod.string()
+})
+
+export const ReceiveResendWebhookBody = zod.record(zod.string(), zod.unknown())
+
+export const ReceiveResendWebhookResponse = zod.void()
+
+
+/**
  * @summary Reserve a short-lived referral file upload
  */
 export const reserveReferralUploadBodyFileNameMax = 180;
@@ -234,13 +274,28 @@ export const createReferralBodyPracticeNameMax = 160;
 export const createReferralBodyDentistPhoneMin = 8;
 export const createReferralBodyDentistPhoneMax = 24;
 
+export const createReferralBodyDentistRegistrationNumberMax = 80;
+
+export const createReferralBodyPracticeAddressMin = 8;
+export const createReferralBodyPracticeAddressMax = 400;
+
 export const createReferralBodyPatientNameMin = 2;
 export const createReferralBodyPatientNameMax = 120;
 
 export const createReferralBodyPatientPhoneMin = 8;
 export const createReferralBodyPatientPhoneMax = 24;
 
+export const createReferralBodyPatientGenderMax = 40;
+
+export const createReferralBodyPatientAgeMin = 0;
+export const createReferralBodyPatientAgeMax = 120;
+
 export const createReferralBodyDateOfBirthRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const createReferralBodyOtherReferralReasonMax = 300;
+
+export const createReferralBodyRelevantClinicalInformationMax = 4000;
 
 export const createReferralBodyRestorativePlanMax = 2000;
 
@@ -252,18 +307,26 @@ export const createReferralBodyUploadIdsMax = 5;
 
 
 export const CreateReferralBody = zod.object({
+  "submissionId": zod.string().uuid(),
   "referralDate": zod.string().regex(createReferralBodyReferralDateRegExp),
   "dentistName": zod.string().min(createReferralBodyDentistNameMin).max(createReferralBodyDentistNameMax),
   "practiceName": zod.string().min(createReferralBodyPracticeNameMin).max(createReferralBodyPracticeNameMax),
   "dentistPhone": zod.string().min(createReferralBodyDentistPhoneMin).max(createReferralBodyDentistPhoneMax),
   "dentistEmail": zod.string().email(),
+  "dentistRegistrationNumber": zod.string().max(createReferralBodyDentistRegistrationNumberMax).nullish(),
+  "practiceAddress": zod.string().min(createReferralBodyPracticeAddressMin).max(createReferralBodyPracticeAddressMax),
   "patientName": zod.string().min(createReferralBodyPatientNameMin).max(createReferralBodyPatientNameMax),
   "patientPhone": zod.string().min(createReferralBodyPatientPhoneMin).max(createReferralBodyPatientPhoneMax),
+  "patientEmail": zod.string().email().nullish(),
+  "patientGender": zod.string().max(createReferralBodyPatientGenderMax).nullish(),
+  "patientAge": zod.number().int().min(createReferralBodyPatientAgeMin).max(createReferralBodyPatientAgeMax).nullish(),
   "dateOfBirth": zod.string().regex(createReferralBodyDateOfBirthRegExp).nullish(),
   "selectedTeeth": zod.array(zod.union([zod.literal(11),zod.literal(12),zod.literal(13),zod.literal(14),zod.literal(15),zod.literal(16),zod.literal(17),zod.literal(18),zod.literal(21),zod.literal(22),zod.literal(23),zod.literal(24),zod.literal(25),zod.literal(26),zod.literal(27),zod.literal(28),zod.literal(31),zod.literal(32),zod.literal(33),zod.literal(34),zod.literal(35),zod.literal(36),zod.literal(37),zod.literal(38),zod.literal(41),zod.literal(42),zod.literal(43),zod.literal(44),zod.literal(45),zod.literal(46),zod.literal(47),zod.literal(48)])).min(1),
-  "requestType": zod.enum(['Endodontic Emergency', 'Consult and Treat as Necessary', 'Endodontic Treatment Initiated — Please Complete Treatment', 'Prognosis/Restorability Consult']),
-  "existingRestoration": zod.enum(['Permanent Crown/Bridge', 'Crown/Bridge with Temporary Cement', 'Temporary Crown', 'Permanent Crown to Be Placed']),
-  "coronalRestoration": zod.enum(['Core Build-up', 'Place Post and Resin Core', 'Restore as Desired', 'Please Call to Discuss', 'Fiber-Reinforced Restoration']),
+  "requestTypes": zod.array(zod.enum(['Root Canal Treatment', 'Root Canal Retreatment', 'Persistent pain or symptoms', 'Complex endodontic case', 'Dental trauma', 'Tooth fracture', 'Endodontic assessment or second opinion', 'Other'])).min(1),
+  "otherReferralReason": zod.string().max(createReferralBodyOtherReferralReasonMax).nullish(),
+  "existingRestoration": zod.enum(['No existing restoration', 'Direct restoration', 'Temporary restoration', 'Crown', 'Post and core', 'Other', 'Unknown']),
+  "coronalRestoration": zod.enum(['Direct restoration', 'Full-coverage crown', 'Onlay or overlay', 'Fiber-Reinforced Restoration', 'Other', 'To be decided after clinical assessment']),
+  "relevantClinicalInformation": zod.string().max(createReferralBodyRelevantClinicalInformationMax),
   "restorativePlan": zod.string().max(createReferralBodyRestorativePlanMax).optional(),
   "clinicalComments": zod.string().max(createReferralBodyClinicalCommentsMax).optional(),
   "preferredDate": zod.string().regex(createReferralBodyPreferredDateRegExp).nullish(),
@@ -277,7 +340,7 @@ export const CreateReferralResponse = zod.object({
   "reference": zod.string(),
   "status": zod.enum(['received', 'reviewing', 'contacted', 'scheduled', 'closed']),
   "message": zod.string(),
-  "emailStatus": zod.enum(['sent', 'failed', 'not_configured'])
+  "emailStatus": zod.enum(['accepted', 'delivered', 'failed', 'not_configured'])
 })
 
 
@@ -353,10 +416,11 @@ export const GetAdminDashboardResponse = zod.object({
  */
 export const ListAdminNotificationsResponseItem = zod.object({
   "id": zod.string(),
+  "entityType": zod.enum(['appointment', 'referral', 'contact']),
   "event": zod.string(),
   "recipient": zod.string().email(),
   "entityReference": zod.string(),
-  "status": zod.enum(['sent', 'failed', 'not_configured']),
+  "status": zod.enum(['accepted', 'delivered', 'failed', 'not_configured']),
   "attempts": zod.number().int(),
   "lastError": zod.string().nullish(),
   "updatedAt": zod.coerce.date()
@@ -373,10 +437,11 @@ export const RetryAdminNotificationParams = zod.object({
 
 export const RetryAdminNotificationResponse = zod.object({
   "id": zod.string(),
+  "entityType": zod.enum(['appointment', 'referral', 'contact']),
   "event": zod.string(),
   "recipient": zod.string().email(),
   "entityReference": zod.string(),
-  "status": zod.enum(['sent', 'failed', 'not_configured']),
+  "status": zod.enum(['accepted', 'delivered', 'failed', 'not_configured']),
   "attempts": zod.number().int(),
   "lastError": zod.string().nullish(),
   "updatedAt": zod.coerce.date()
@@ -552,65 +617,77 @@ export const RescheduleAdminAppointmentResponse = zod.object({
 
 
 /**
+ * @summary Mark a past appointment complete
+ */
+export const CompleteAdminAppointmentParams = zod.object({
+  "appointmentId": zod.coerce.string()
+})
+
+export const CompleteAdminAppointmentBody = zod.object({
+  "confirmed": zod.literal(true)
+})
+
+export const completeAdminAppointmentResponseDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
+
+
+export const CompleteAdminAppointmentResponse = zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "locationId": zod.string(),
+  "locationName": zod.string(),
+  "date": zod.string().regex(completeAdminAppointmentResponseDateRegExp),
+  "time": zod.string(),
+  "status": zod.enum(['pending', 'confirmed', 'cancelled', 'completed']),
+  "source": zod.enum(['online', 'phone']),
+  "patientName": zod.string(),
+  "phone": zod.string(),
+  "email": zod.string().email().nullable(),
+  "appointmentType": zod.string(),
+  "notes": zod.string().optional(),
+  "internalNotes": zod.string()
+})
+
+
+/**
  * @summary List submitted referrals for authorized clinic staff
  */
 export const ListAdminReferralsQueryParams = zod.object({
   "status": zod.enum(['received', 'reviewing', 'contacted', 'scheduled', 'closed']).optional()
 })
 
-export const listAdminReferralsResponseOneReferralDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-export const listAdminReferralsResponseOneDentistNameMin = 2;
-export const listAdminReferralsResponseOneDentistNameMax = 120;
-
-export const listAdminReferralsResponseOnePracticeNameMin = 2;
-export const listAdminReferralsResponseOnePracticeNameMax = 160;
-
-export const listAdminReferralsResponseOneDentistPhoneMin = 8;
-export const listAdminReferralsResponseOneDentistPhoneMax = 24;
-
-export const listAdminReferralsResponseOnePatientNameMin = 2;
-export const listAdminReferralsResponseOnePatientNameMax = 120;
-
-export const listAdminReferralsResponseOnePatientPhoneMin = 8;
-export const listAdminReferralsResponseOnePatientPhoneMax = 24;
-
-export const listAdminReferralsResponseOneDateOfBirthRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-
-export const listAdminReferralsResponseOneRestorativePlanMax = 2000;
-
-export const listAdminReferralsResponseOneClinicalCommentsMax = 4000;
-
-export const listAdminReferralsResponseOnePreferredDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-export const listAdminReferralsResponseOneUploadIdsMax = 5;
-
-
-
 export const ListAdminReferralsResponseItem = zod.object({
-  "referralDate": zod.string().regex(listAdminReferralsResponseOneReferralDateRegExp),
-  "dentistName": zod.string().min(listAdminReferralsResponseOneDentistNameMin).max(listAdminReferralsResponseOneDentistNameMax),
-  "practiceName": zod.string().min(listAdminReferralsResponseOnePracticeNameMin).max(listAdminReferralsResponseOnePracticeNameMax),
-  "dentistPhone": zod.string().min(listAdminReferralsResponseOneDentistPhoneMin).max(listAdminReferralsResponseOneDentistPhoneMax),
-  "dentistEmail": zod.string().email(),
-  "patientName": zod.string().min(listAdminReferralsResponseOnePatientNameMin).max(listAdminReferralsResponseOnePatientNameMax),
-  "patientPhone": zod.string().min(listAdminReferralsResponseOnePatientPhoneMin).max(listAdminReferralsResponseOnePatientPhoneMax),
-  "dateOfBirth": zod.string().regex(listAdminReferralsResponseOneDateOfBirthRegExp).nullish(),
-  "selectedTeeth": zod.array(zod.union([zod.literal(11),zod.literal(12),zod.literal(13),zod.literal(14),zod.literal(15),zod.literal(16),zod.literal(17),zod.literal(18),zod.literal(21),zod.literal(22),zod.literal(23),zod.literal(24),zod.literal(25),zod.literal(26),zod.literal(27),zod.literal(28),zod.literal(31),zod.literal(32),zod.literal(33),zod.literal(34),zod.literal(35),zod.literal(36),zod.literal(37),zod.literal(38),zod.literal(41),zod.literal(42),zod.literal(43),zod.literal(44),zod.literal(45),zod.literal(46),zod.literal(47),zod.literal(48)])).min(1),
-  "requestType": zod.enum(['Endodontic Emergency', 'Consult and Treat as Necessary', 'Endodontic Treatment Initiated — Please Complete Treatment', 'Prognosis/Restorability Consult']),
-  "existingRestoration": zod.enum(['Permanent Crown/Bridge', 'Crown/Bridge with Temporary Cement', 'Temporary Crown', 'Permanent Crown to Be Placed']),
-  "coronalRestoration": zod.enum(['Core Build-up', 'Place Post and Resin Core', 'Restore as Desired', 'Please Call to Discuss', 'Fiber-Reinforced Restoration']),
-  "restorativePlan": zod.string().max(listAdminReferralsResponseOneRestorativePlanMax).optional(),
-  "clinicalComments": zod.string().max(listAdminReferralsResponseOneClinicalCommentsMax).optional(),
-  "preferredDate": zod.string().regex(listAdminReferralsResponseOnePreferredDateRegExp).nullish(),
-  "preferredTime": zod.string().nullish(),
-  "uploadIds": zod.array(zod.string()).max(listAdminReferralsResponseOneUploadIdsMax).optional(),
-  "authorizationConfirmed": zod.literal(true)
-}).and(zod.object({
   "id": zod.string(),
   "reference": zod.string(),
+  "submissionId": zod.string().optional(),
+  "referralDate": zod.string().optional(),
+  "dentistName": zod.string(),
+  "practiceName": zod.string(),
+  "dentistPhone": zod.string().optional(),
+  "dentistEmail": zod.string().email().optional(),
+  "dentistRegistrationNumber": zod.string().nullish(),
+  "practiceAddress": zod.string().optional(),
+  "patientName": zod.string(),
+  "patientPhone": zod.string().optional(),
+  "patientEmail": zod.string().email().nullish(),
+  "patientGender": zod.string().nullish(),
+  "patientAge": zod.number().int().nullish(),
+  "dateOfBirth": zod.string().nullish(),
+  "selectedTeeth": zod.array(zod.number().int()),
+  "requestTypes": zod.array(zod.enum(['Root Canal Treatment', 'Root Canal Retreatment', 'Persistent pain or symptoms', 'Complex endodontic case', 'Dental trauma', 'Tooth fracture', 'Endodontic assessment or second opinion', 'Other'])),
+  "otherReferralReason": zod.string().nullish(),
+  "existingRestoration": zod.enum(['No existing restoration', 'Direct restoration', 'Temporary restoration', 'Crown', 'Post and core', 'Other', 'Unknown']).optional(),
+  "coronalRestoration": zod.enum(['Direct restoration', 'Full-coverage crown', 'Onlay or overlay', 'Fiber-Reinforced Restoration', 'Other', 'To be decided after clinical assessment']).optional(),
+  "relevantClinicalInformation": zod.string().optional(),
+  "restorativePlan": zod.string().optional(),
+  "clinicalComments": zod.string().optional(),
+  "preferredDate": zod.string().nullish(),
+  "preferredTime": zod.string().nullish(),
+  "uploadIds": zod.array(zod.string()),
+  "authorizationConfirmed": zod.boolean().optional(),
   "status": zod.enum(['received', 'reviewing', 'contacted', 'scheduled', 'closed']),
   "createdAt": zod.coerce.date(),
   "internalNotes": zod.string()
-}))
+})
 export const ListAdminReferralsResponse = zod.array(ListAdminReferralsResponseItem)
 
 
@@ -630,59 +707,39 @@ export const UpdateReferralStatusBody = zod.object({
   "internalNotes": zod.string().max(updateReferralStatusBodyInternalNotesMax).optional()
 })
 
-export const updateReferralStatusResponseOneReferralDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-export const updateReferralStatusResponseOneDentistNameMin = 2;
-export const updateReferralStatusResponseOneDentistNameMax = 120;
-
-export const updateReferralStatusResponseOnePracticeNameMin = 2;
-export const updateReferralStatusResponseOnePracticeNameMax = 160;
-
-export const updateReferralStatusResponseOneDentistPhoneMin = 8;
-export const updateReferralStatusResponseOneDentistPhoneMax = 24;
-
-export const updateReferralStatusResponseOnePatientNameMin = 2;
-export const updateReferralStatusResponseOnePatientNameMax = 120;
-
-export const updateReferralStatusResponseOnePatientPhoneMin = 8;
-export const updateReferralStatusResponseOnePatientPhoneMax = 24;
-
-export const updateReferralStatusResponseOneDateOfBirthRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-
-export const updateReferralStatusResponseOneRestorativePlanMax = 2000;
-
-export const updateReferralStatusResponseOneClinicalCommentsMax = 4000;
-
-export const updateReferralStatusResponseOnePreferredDateRegExp = new RegExp('^\\d{4}-\\d{2}-\\d{2}$');
-export const updateReferralStatusResponseOneUploadIdsMax = 5;
-
-
-
 export const UpdateReferralStatusResponse = zod.object({
-  "referralDate": zod.string().regex(updateReferralStatusResponseOneReferralDateRegExp),
-  "dentistName": zod.string().min(updateReferralStatusResponseOneDentistNameMin).max(updateReferralStatusResponseOneDentistNameMax),
-  "practiceName": zod.string().min(updateReferralStatusResponseOnePracticeNameMin).max(updateReferralStatusResponseOnePracticeNameMax),
-  "dentistPhone": zod.string().min(updateReferralStatusResponseOneDentistPhoneMin).max(updateReferralStatusResponseOneDentistPhoneMax),
-  "dentistEmail": zod.string().email(),
-  "patientName": zod.string().min(updateReferralStatusResponseOnePatientNameMin).max(updateReferralStatusResponseOnePatientNameMax),
-  "patientPhone": zod.string().min(updateReferralStatusResponseOnePatientPhoneMin).max(updateReferralStatusResponseOnePatientPhoneMax),
-  "dateOfBirth": zod.string().regex(updateReferralStatusResponseOneDateOfBirthRegExp).nullish(),
-  "selectedTeeth": zod.array(zod.union([zod.literal(11),zod.literal(12),zod.literal(13),zod.literal(14),zod.literal(15),zod.literal(16),zod.literal(17),zod.literal(18),zod.literal(21),zod.literal(22),zod.literal(23),zod.literal(24),zod.literal(25),zod.literal(26),zod.literal(27),zod.literal(28),zod.literal(31),zod.literal(32),zod.literal(33),zod.literal(34),zod.literal(35),zod.literal(36),zod.literal(37),zod.literal(38),zod.literal(41),zod.literal(42),zod.literal(43),zod.literal(44),zod.literal(45),zod.literal(46),zod.literal(47),zod.literal(48)])).min(1),
-  "requestType": zod.enum(['Endodontic Emergency', 'Consult and Treat as Necessary', 'Endodontic Treatment Initiated — Please Complete Treatment', 'Prognosis/Restorability Consult']),
-  "existingRestoration": zod.enum(['Permanent Crown/Bridge', 'Crown/Bridge with Temporary Cement', 'Temporary Crown', 'Permanent Crown to Be Placed']),
-  "coronalRestoration": zod.enum(['Core Build-up', 'Place Post and Resin Core', 'Restore as Desired', 'Please Call to Discuss', 'Fiber-Reinforced Restoration']),
-  "restorativePlan": zod.string().max(updateReferralStatusResponseOneRestorativePlanMax).optional(),
-  "clinicalComments": zod.string().max(updateReferralStatusResponseOneClinicalCommentsMax).optional(),
-  "preferredDate": zod.string().regex(updateReferralStatusResponseOnePreferredDateRegExp).nullish(),
-  "preferredTime": zod.string().nullish(),
-  "uploadIds": zod.array(zod.string()).max(updateReferralStatusResponseOneUploadIdsMax).optional(),
-  "authorizationConfirmed": zod.literal(true)
-}).and(zod.object({
   "id": zod.string(),
   "reference": zod.string(),
+  "submissionId": zod.string().optional(),
+  "referralDate": zod.string().optional(),
+  "dentistName": zod.string(),
+  "practiceName": zod.string(),
+  "dentistPhone": zod.string().optional(),
+  "dentistEmail": zod.string().email().optional(),
+  "dentistRegistrationNumber": zod.string().nullish(),
+  "practiceAddress": zod.string().optional(),
+  "patientName": zod.string(),
+  "patientPhone": zod.string().optional(),
+  "patientEmail": zod.string().email().nullish(),
+  "patientGender": zod.string().nullish(),
+  "patientAge": zod.number().int().nullish(),
+  "dateOfBirth": zod.string().nullish(),
+  "selectedTeeth": zod.array(zod.number().int()),
+  "requestTypes": zod.array(zod.enum(['Root Canal Treatment', 'Root Canal Retreatment', 'Persistent pain or symptoms', 'Complex endodontic case', 'Dental trauma', 'Tooth fracture', 'Endodontic assessment or second opinion', 'Other'])),
+  "otherReferralReason": zod.string().nullish(),
+  "existingRestoration": zod.enum(['No existing restoration', 'Direct restoration', 'Temporary restoration', 'Crown', 'Post and core', 'Other', 'Unknown']).optional(),
+  "coronalRestoration": zod.enum(['Direct restoration', 'Full-coverage crown', 'Onlay or overlay', 'Fiber-Reinforced Restoration', 'Other', 'To be decided after clinical assessment']).optional(),
+  "relevantClinicalInformation": zod.string().optional(),
+  "restorativePlan": zod.string().optional(),
+  "clinicalComments": zod.string().optional(),
+  "preferredDate": zod.string().nullish(),
+  "preferredTime": zod.string().nullish(),
+  "uploadIds": zod.array(zod.string()),
+  "authorizationConfirmed": zod.boolean().optional(),
   "status": zod.enum(['received', 'reviewing', 'contacted', 'scheduled', 'closed']),
   "createdAt": zod.coerce.date(),
   "internalNotes": zod.string()
-}))
+})
 
 
 /**
@@ -838,6 +895,31 @@ export const CreateAdminAvailabilityOverrideResponse = zod.object({
 }).and(zod.object({
   "id": zod.string()
 }))
+
+
+/**
+ * @summary Remove a date-specific availability override
+ */
+export const DeleteAdminAvailabilityOverrideParams = zod.object({
+  "overrideId": zod.coerce.string()
+})
+
+export const DeleteAdminAvailabilityOverrideResponse = zod.void()
+
+
+/**
+ * @summary View contact messages for authorized practice staff
+ */
+export const ListAdminContactMessagesResponseItem = zod.object({
+  "id": zod.string(),
+  "reference": zod.string(),
+  "name": zod.string(),
+  "email": zod.string().email(),
+  "phone": zod.string().nullable(),
+  "message": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListAdminContactMessagesResponse = zod.array(ListAdminContactMessagesResponseItem)
 
 
 /**

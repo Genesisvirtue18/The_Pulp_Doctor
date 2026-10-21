@@ -25,6 +25,7 @@ export interface AppointmentDocument extends Document {
   internalNotes: string;
   managementTokenHash: string | null;
   reservationKey?: string;
+  reservationBuckets?: string[];
 }
 
 const appointmentSchema = new Schema<AppointmentDocument>(
@@ -52,6 +53,7 @@ const appointmentSchema = new Schema<AppointmentDocument>(
     internalNotes: { type: String, default: "" },
     managementTokenHash: { type: String, default: null, select: false },
     reservationKey: { type: String },
+    reservationBuckets: { type: [String] },
   },
   { timestamps: true, strict: "throw" },
 );
@@ -61,6 +63,10 @@ const appointmentSchema = new Schema<AppointmentDocument>(
 appointmentSchema.index(
   { reservationKey: 1 },
   { unique: true, sparse: true, name: "unique_active_doctor_slot" },
+);
+appointmentSchema.index(
+  { reservationBuckets: 1 },
+  { unique: true, sparse: true, name: "unique_active_appointment_buckets" },
 );
 appointmentSchema.index({ localDate: 1, locationId: 1, status: 1 });
 

@@ -4,13 +4,17 @@ import { connectMongo, isMongoConfigured } from "../lib/mongo";
 
 const router: IRouter = Router();
 
-router.get("/healthz", async (_req, res): Promise<void> => {
+router.get("/healthz", async (req, res): Promise<void> => {
   let status = "degraded";
   if (isMongoConfigured()) {
     try {
       await connectMongo();
       status = "ok";
-    } catch {
+    } catch (error) {
+      req.log.warn(
+        { errorName: error instanceof Error ? error.name : "UnknownError" },
+        "MongoDB health check failed",
+      );
       status = "degraded";
     }
   }

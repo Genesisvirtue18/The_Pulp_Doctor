@@ -42,6 +42,28 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/ClinicLocation"
+  /contact:
+    post:
+      operationId: createContactMessage
+      tags: [public]
+      summary: Send a practice contact message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContactMessageInput"
+      responses:
+        "201":
+          description: Contact message saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContactMessageConfirmation"
+        "400":
+          description: Invalid contact details
+        "503":
+          description: Contact service is unavailable
   /availability:
     get:
       operationId: getAvailability
@@ -144,6 +166,35 @@ paths:
           description: Requested slot is no longer available
         "403":
           description: Invalid management token
+  /webhooks/resend:
+    post:
+      operationId: receiveResendWebhook
+      tags: [public]
+      summary: Record verified Resend delivery events
+      parameters:
+        - name: svix-id
+          in: header
+          required: true
+          schema: { type: string }
+        - name: svix-timestamp
+          in: header
+          required: true
+          schema: { type: string }
+        - name: svix-signature
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendWebhookPayload"
+      responses:
+        "204":
+          description: Webhook event recorded
+        "400":
+          description: Invalid webhook signature or payload
   /referral-uploads/reservations:
     post:
       operationId: reserveReferralUpload
@@ -427,6 +478,34 @@ paths:
           description: Requested slot is no longer available
         "401":
           description: Not signed in
+  /admin/appointments/{appointmentId}/complete:
+    post:
+      operationId: completeAdminAppointment
+      tags: [admin]
+      summary: Mark a past appointment complete
+      parameters:
+        - name: appointmentId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminActionInput"
+      responses:
+        "200":
+          description: Appointment marked complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAppointment"
+        "401":
+          description: Not signed in
+        "409":
+          description: Appointment is not eligible for completion
   /admin/referrals:
     get:
       operationId: listAdminReferrals
@@ -597,6 +676,40 @@ paths:
                 $ref: "#/components/schemas/AvailabilityOverride"
         "401":
           description: Not signed in
+  /admin/availability-overrides/{overrideId}:
+    delete:
+      operationId: deleteAdminAvailabilityOverride
+      tags: [admin]
+      summary: Remove a date-specific availability override
+      parameters:
+        - name: overrideId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Availability override removed
+        "401":
+          description: Not signed in
+        "404":
+          description: Override not found
+  /admin/contact-messages:
+    get:
+      operationId: listAdminContactMessages
+      tags: [admin]
+      summary: View contact messages for authorized practice staff
+      responses:
+        "200":
+          description: Recent contact messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ContactMessage"
+        "401":
+          description: Not signed in
   /admin/schedules/{locationId}:
     put:
       operationId: updateAdminSchedule
@@ -625,6 +738,9 @@ paths:
           description: Not signed in
 components:
   schemas:
+    ResendWebhookPayload:
+      type: object
+      additionalProperties: true
     HealthStatus:
       type: object
       properties:
@@ -634,7 +750,7 @@ components:
         - status
     NotificationStatus:
       type: string
-      enum: [sent, failed, not_configured]
+      enum: [accepted, delivered, failed, not_configured]
     ClinicLocation:
       type: object
       required: [id, name, clinicName, address, mapsUrl, phone, weeklyHours]
@@ -780,48 +896,65 @@ components:
     ReferralRequestType:
       type: string
       enum:
-        - Endodontic Emergency
-        - Consult and Treat as Necessary
-        - Endodontic Treatment Initiated — Please Complete Treatment
-        - Prognosis/Restorability Consult
+        - Root Canal Treatment
+        - Root Canal Retreatment
+        - Persistent pain or symptoms
+        - Complex endodontic case
+        - Dental trauma
+        - Tooth fracture
+        - Endodontic assessment or second opinion
+        - Other
     ExistingRestoration:
       type: string
       enum:
-        - Permanent Crown/Bridge
-        - Crown/Bridge with Temporary Cement
-        - Temporary Crown
-        - Permanent Crown to Be Placed
+        - No existing restoration
+        - Direct restoration
+        - Temporary restoration
+        - Crown
+        - Post and core
+        - Other
+        - Unknown
     CoronalRestoration:
       type: string
       enum:
-        - Core Build-up
-        - Place Post and Resin Core
-        - Restore as Desired
-        - Please Call to Discuss
+        - Direct restoration
+        - Full-coverage crown
+        - Onlay or overlay
         - Fiber-Reinforced Restoration
+        - Other
+        - To be decided after clinical assessment
     ReferralInput:
       type: object
       required:
+        - submissionId
         - referralDate
         - dentistName
         - practiceName
         - dentistPhone
         - dentistEmail
+        - practiceAddress
         - patientName
         - patientPhone
+        - requestTypes
         - selectedTeeth
-        - requestType
         - existingRestoration
         - coronalRestoration
+        - relevantClinicalInformation
         - authorizationConfirmed
       properties:
+        submissionId: { type: string, format: uuid }
         referralDate: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
         dentistName: { type: string, minLength: 2, maxLength: 120 }
         practiceName: { type: string, minLength: 2, maxLength: 160 }
         dentistPhone: { type: string, minLength: 8, maxLength: 24 }
         dentistEmail: { type: string, format: email }
+        dentistRegistrationNumber: { type: ["string", "null"], maxLength: 80 }
+        practiceAddress: { type: string, minLength: 8, maxLength: 400 }
         patientName: { type: string, minLength: 2, maxLength: 120 }
         patientPhone: { type: string, minLength: 8, maxLength: 24 }
+        patientEmail: { type: ["string", "null"], format: email }
+        patientGender: { type: ["string", "null"], maxLength: 40 }
+        patientAge: { type: ["integer", "null"], minimum: 0, maximum: 120 }
         dateOfBirth:
           type: ["string", "null"]
           pattern: "^\\d{4}-\\d{2}-\\d{2}$"
@@ -832,12 +965,18 @@ components:
           items:
             type: integer
             enum: [11, 12, 13, 14, 15, 16, 17, 18, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33, 34, 35, 36, 37, 38, 41, 42, 43, 44, 45, 46, 47, 48]
-        requestType:
-          $ref: "#/components/schemas/ReferralRequestType"
+        requestTypes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ReferralRequestType"
+        otherReferralReason: { type: ["string", "null"], maxLength: 300 }
         existingRestoration:
           $ref: "#/components/schemas/ExistingRestoration"
         coronalRestoration:
           $ref: "#/components/schemas/CoronalRestoration"
+        relevantClinicalInformation: { type: string, maxLength: 4000 }
         restorativePlan: { type: string, maxLength: 2000 }
         clinicalComments: { type: string, maxLength: 4000 }
         preferredDate: { type: ["string", "null"], pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
@@ -847,6 +986,32 @@ components:
           maxItems: 5
           items: { type: string }
         authorizationConfirmed: { type: boolean, const: true }
+    ContactMessageInput:
+      type: object
+      required: [name, email, message]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email }
+        phone: { type: ["string", "null"], maxLength: 24 }
+        message: { type: string, minLength: 10, maxLength: 2000 }
+    ContactMessageConfirmation:
+      type: object
+      required: [reference, emailStatus]
+      properties:
+        reference: { type: string }
+        emailStatus:
+          $ref: "#/components/schemas/NotificationStatus"
+    ContactMessage:
+      type: object
+      required: [id, reference, name, email, phone, message, createdAt]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: ["string", "null"] }
+        message: { type: string }
+        createdAt: { type: string, format: date-time }
     ReferralConfirmation:
       type: object
       required: [id, reference, status, message, emailStatus]
@@ -888,9 +1053,10 @@ components:
             $ref: "#/components/schemas/AdminAppointment"
     AdminNotification:
       type: object
-      required: [id, event, recipient, entityReference, status, attempts, updatedAt]
+      required: [id, entityType, event, recipient, entityReference, status, attempts, updatedAt]
       properties:
         id: { type: string }
+        entityType: { type: string, enum: [appointment, referral, contact] }
         event: { type: string }
         recipient: { type: string, format: email }
         entityReference: { type: string }
@@ -925,6 +1091,11 @@ components:
         appointmentType: { type: string }
         notes: { type: string }
         internalNotes: { type: string }
+    AdminActionInput:
+      type: object
+      required: [confirmed]
+      properties:
+        confirmed: { type: boolean, const: true }
     PhoneAppointmentInput:
       type: object
       required: [locationId, date, slotId, patientName, phone, appointmentType]
@@ -953,17 +1124,50 @@ components:
         date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
         slotId: { type: string, pattern: "^([01]\\d|2[0-3]):[0-5]\\d$" }
     AdminReferral:
-      allOf:
-        - $ref: "#/components/schemas/ReferralInput"
-        - type: object
-          required: [id, reference, status, createdAt, internalNotes]
-          properties:
-            id: { type: string }
-            reference: { type: string }
-            status:
-              $ref: "#/components/schemas/ReferralStatus"
-            createdAt: { type: string, format: date-time }
-            internalNotes: { type: string }
+      type: object
+      required: [id, reference, status, createdAt, patientName, dentistName, practiceName, selectedTeeth, requestTypes, uploadIds, internalNotes]
+      properties:
+        id: { type: string }
+        reference: { type: string }
+        submissionId: { type: string }
+        referralDate: { type: string }
+        dentistName: { type: string }
+        practiceName: { type: string }
+        dentistPhone: { type: string }
+        dentistEmail: { type: string, format: email }
+        dentistRegistrationNumber: { type: ["string", "null"] }
+        practiceAddress: { type: string }
+        patientName: { type: string }
+        patientPhone: { type: string }
+        patientEmail: { type: ["string", "null"], format: email }
+        patientGender: { type: ["string", "null"] }
+        patientAge: { type: ["integer", "null"] }
+        dateOfBirth: { type: ["string", "null"] }
+        selectedTeeth:
+          type: array
+          items: { type: integer }
+        requestTypes:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReferralRequestType"
+        otherReferralReason: { type: ["string", "null"] }
+        existingRestoration:
+          $ref: "#/components/schemas/ExistingRestoration"
+        coronalRestoration:
+          $ref: "#/components/schemas/CoronalRestoration"
+        relevantClinicalInformation: { type: string }
+        restorativePlan: { type: string }
+        clinicalComments: { type: string }
+        preferredDate: { type: ["string", "null"] }
+        preferredTime: { type: ["string", "null"] }
+        uploadIds:
+          type: array
+          items: { type: string }
+        authorizationConfirmed: { type: boolean }
+        status:
+          $ref: "#/components/schemas/ReferralStatus"
+        createdAt: { type: string, format: date-time }
+        internalNotes: { type: string }
     ReferralStatusInput:
       type: object
       required: [status]
@@ -1018,4 +1222,3 @@ components:
       required: [error]
       properties:
         error: { type: string }
-

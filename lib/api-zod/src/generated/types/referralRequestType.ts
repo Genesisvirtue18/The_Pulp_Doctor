@@ -10,8 +10,12 @@ export type ReferralRequestType = typeof ReferralRequestType[keyof typeof Referr
 
 
 export const ReferralRequestType = {
-  Endodontic_Emergency: 'Endodontic Emergency',
-  Consult_and_Treat_as_Necessary: 'Consult and Treat as Necessary',
-  'Endodontic_Treatment_Initiated_—_Please_Complete_Treatment': 'Endodontic Treatment Initiated — Please Complete Treatment',
-  'Prognosis/Restorability_Consult': 'Prognosis/Restorability Consult',
+  Root_Canal_Treatment: 'Root Canal Treatment',
+  Root_Canal_Retreatment: 'Root Canal Retreatment',
+  Persistent_pain_or_symptoms: 'Persistent pain or symptoms',
+  Complex_endodontic_case: 'Complex endodontic case',
+  Dental_trauma: 'Dental trauma',
+  Tooth_fracture: 'Tooth fracture',
+  Endodontic_assessment_or_second_opinion: 'Endodontic assessment or second opinion',
+  Other: 'Other',
 } as const;

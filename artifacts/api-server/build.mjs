@@ -71,7 +71,6 @@ async function buildAll() {
       "@parcel/watcher",
       "@sentry/profiling-node",
       "@tree-sitter/*",
-      "aws-sdk",
       "classic-level",
       "dd-trace",
       "ffi-napi",

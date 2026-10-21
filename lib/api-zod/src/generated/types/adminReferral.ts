@@ -5,13 +5,49 @@
  * Public website, appointments, referrals, and protected clinic administration.
  * OpenAPI spec version: 0.1.0
  */
-import type { ReferralInput } from './referralInput';
+import type { CoronalRestoration } from './coronalRestoration';
+import type { ExistingRestoration } from './existingRestoration';
+import type { ReferralRequestType } from './referralRequestType';
 import type { ReferralStatus } from './referralStatus';
 
-export type AdminReferral = ReferralInput & {
+export interface AdminReferral {
   id: string;
   reference: string;
+  submissionId?: string;
+  referralDate?: string;
+  dentistName: string;
+  practiceName: string;
+  dentistPhone?: string;
+  dentistEmail?: string;
+  /** @nullable */
+  dentistRegistrationNumber?: string | null;
+  practiceAddress?: string;
+  patientName: string;
+  patientPhone?: string;
+  /** @nullable */
+  patientEmail?: string | null;
+  /** @nullable */
+  patientGender?: string | null;
+  /** @nullable */
+  patientAge?: number | null;
+  /** @nullable */
+  dateOfBirth?: string | null;
+  selectedTeeth: number[];
+  requestTypes: ReferralRequestType[];
+  /** @nullable */
+  otherReferralReason?: string | null;
+  existingRestoration?: ExistingRestoration;
+  coronalRestoration?: CoronalRestoration;
+  relevantClinicalInformation?: string;
+  restorativePlan?: string;
+  clinicalComments?: string;
+  /** @nullable */
+  preferredDate?: string | null;
+  /** @nullable */
+  preferredTime?: string | null;
+  uploadIds: string[];
+  authorizationConfirmed?: boolean;
   status: ReferralStatus;
   createdAt: Date;
   internalNotes: string;
-};
+}

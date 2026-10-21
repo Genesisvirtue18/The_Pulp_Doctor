@@ -6,6 +6,7 @@ import rateLimit from "express-rate-limit";
 import pinoHttp from "pino-http";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { getAllowedOrigins } from "./lib/origin";
 
 const app: Express = express();
 
@@ -30,19 +31,21 @@ app.use(
     },
   }),
 );
-const allowedOrigins = (process.env.APP_ORIGIN ?? "")
-  .split(",")
-  .map((origin) => origin.trim())
-  .filter(Boolean);
+const allowedOrigins = new Set(getAllowedOrigins());
 app.use(
   cors({
     credentials: true,
     origin(origin, callback) {
-      callback(null, Boolean(origin && allowedOrigins.includes(origin)));
+      callback(null, Boolean(origin && allowedOrigins.has(origin)));
     },
   }),
 );
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({
+  limit: "1mb",
+  verify(req, _res, buffer) {
+    (req as express.Request & { rawBody?: string }).rawBody = buffer.toString();
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(

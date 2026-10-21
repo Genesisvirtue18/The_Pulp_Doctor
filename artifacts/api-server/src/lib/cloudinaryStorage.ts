@@ -1,6 +1,7 @@
 import { Readable } from "node:stream";
 import { fileTypeFromBuffer } from "file-type";
 import { v2 as cloudinary } from "cloudinary";
+import { logger } from "./logger";
 
 const MAX_REFERRAL_FILE_SIZE = 10 * 1024 * 1024;
 const MIME_EXTENSIONS: Record<string, string[]> = {
@@ -230,7 +231,12 @@ export async function storeReferralFile(input: {
     !validFormat ||
     !MIME_EXTENSIONS[input.contentType]?.includes(extension)
   ) {
-    await deleteReferralAsset(asset.cloudinaryPublicId).catch(() => undefined);
+    await deleteReferralAsset(asset.cloudinaryPublicId).catch((error: unknown) => {
+      logger.error(
+        { errorName: error instanceof Error ? error.name : "UnknownError" },
+        "Could not remove invalid Cloudinary referral asset",
+      );
+    });
     throw new InvalidReferralFileError(
       "Cloudinary did not store the referral file with the expected private metadata.",
     );

@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminActionInput,
   AdminAppointment,
   AdminCancelInput,
   AdminDashboard,
@@ -39,6 +40,9 @@ import type {
   AvailabilityResponse,
   ClinicLocation,
   ClinicLocationInput,
+  ContactMessage,
+  ContactMessageConfirmation,
+  ContactMessageInput,
   GetAvailabilityParams,
   HealthStatus,
   ListAdminAppointmentsParams,
@@ -53,6 +57,7 @@ import type {
   ReferralUploadComplete,
   ReferralUploadInput,
   ReferralUploadReservation,
+  ResendWebhookPayload,
   ScheduleInput
 } from './api.schemas';
 
@@ -237,6 +242,94 @@ export function useListLocations<TData = Awaited<ReturnType<typeof listLocations
 
 
 
+
+export const getCreateContactMessageUrl = () => {
+
+
+
+
+  return `/api/contact`
+}
+
+/**
+ * @summary Send a practice contact message
+ */
+export const createContactMessage = async (contactMessageInput: ContactMessageInput, options?: Parameters<typeof customFetch>[1]): Promise<ContactMessageConfirmation> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<ContactMessageConfirmation>(getCreateContactMessageUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(contactMessageInput)
+  }
+);}
+
+
+
+
+
+export const getCreateContactMessageMutationKey = () => ['createContactMessage'] as const;
+
+export const getCreateContactMessageMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createContactMessage>>, TError,CreateContactMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createContactMessage>>, TError,CreateContactMessageMutationVariables, TContext> => {
+
+const mutationKey = getCreateContactMessageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createContactMessage>>, CreateContactMessageMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createContactMessage(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateContactMessageMutationResult = NonNullable<Awaited<ReturnType<typeof createContactMessage>>>
+    export type CreateContactMessageMutationBody = BodyType<ContactMessageInput>
+    export type CreateContactMessageMutationError = ErrorType<void>
+    export type CreateContactMessageMutationVariables = {data: BodyType<ContactMessageInput>}
+
+    /**
+ * @summary Send a practice contact message
+ */
+export const useCreateContactMessage = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createContactMessage>>, TError,CreateContactMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createContactMessage>>,
+        TError,
+        CreateContactMessageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateContactMessageMutationOptions(options));
+    }
 
 export const getGetAvailabilityUrl = (params: GetAvailabilityParams,) => {
   const normalizedParams = new URLSearchParams();
@@ -586,6 +679,94 @@ export const useRescheduleAppointment = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getRescheduleAppointmentMutationOptions(options));
+    }
+
+export const getReceiveResendWebhookUrl = () => {
+
+
+
+
+  return `/api/webhooks/resend`
+}
+
+/**
+ * @summary Record verified Resend delivery events
+ */
+export const receiveResendWebhook = async (resendWebhookPayload: ResendWebhookPayload, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<void>(getReceiveResendWebhookUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(resendWebhookPayload)
+  }
+);}
+
+
+
+
+
+export const getReceiveResendWebhookMutationKey = () => ['receiveResendWebhook'] as const;
+
+export const getReceiveResendWebhookMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receiveResendWebhook>>, TError,ReceiveResendWebhookMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof receiveResendWebhook>>, TError,ReceiveResendWebhookMutationVariables, TContext> => {
+
+const mutationKey = getReceiveResendWebhookMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof receiveResendWebhook>>, ReceiveResendWebhookMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  receiveResendWebhook(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReceiveResendWebhookMutationResult = NonNullable<Awaited<ReturnType<typeof receiveResendWebhook>>>
+    export type ReceiveResendWebhookMutationBody = BodyType<ResendWebhookPayload>
+    export type ReceiveResendWebhookMutationError = ErrorType<void>
+    export type ReceiveResendWebhookMutationVariables = {data: BodyType<ResendWebhookPayload>}
+
+    /**
+ * @summary Record verified Resend delivery events
+ */
+export const useReceiveResendWebhook = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof receiveResendWebhook>>, TError,ReceiveResendWebhookMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof receiveResendWebhook>>,
+        TError,
+        ReceiveResendWebhookMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReceiveResendWebhookMutationOptions(options));
     }
 
 export const getReserveReferralUploadUrl = () => {
@@ -1658,6 +1839,95 @@ export const useRescheduleAdminAppointment = <TError = ErrorType<void>,
       return useMutation(getRescheduleAdminAppointmentMutationOptions(options));
     }
 
+export const getCompleteAdminAppointmentUrl = (appointmentId: string,) => {
+
+
+
+
+  return `/api/admin/appointments/${appointmentId}/complete`
+}
+
+/**
+ * @summary Mark a past appointment complete
+ */
+export const completeAdminAppointment = async (appointmentId: string,
+    adminActionInput: AdminActionInput, options?: Parameters<typeof customFetch>[1]): Promise<AdminAppointment> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<AdminAppointment>(getCompleteAdminAppointmentUrl(appointmentId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminActionInput)
+  }
+);}
+
+
+
+
+
+export const getCompleteAdminAppointmentMutationKey = () => ['completeAdminAppointment'] as const;
+
+export const getCompleteAdminAppointmentMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeAdminAppointment>>, TError,CompleteAdminAppointmentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeAdminAppointment>>, TError,CompleteAdminAppointmentMutationVariables, TContext> => {
+
+const mutationKey = getCompleteAdminAppointmentMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeAdminAppointment>>, CompleteAdminAppointmentMutationVariables> = (props) => {
+          const {appointmentId,data} = props ?? {};
+
+          return  completeAdminAppointment(appointmentId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteAdminAppointmentMutationResult = NonNullable<Awaited<ReturnType<typeof completeAdminAppointment>>>
+    export type CompleteAdminAppointmentMutationBody = BodyType<AdminActionInput>
+    export type CompleteAdminAppointmentMutationError = ErrorType<void>
+    export type CompleteAdminAppointmentMutationVariables = {appointmentId: string;data: BodyType<AdminActionInput>}
+
+    /**
+ * @summary Mark a past appointment complete
+ */
+export const useCompleteAdminAppointment = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeAdminAppointment>>, TError,CompleteAdminAppointmentMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof completeAdminAppointment>>,
+        TError,
+        CompleteAdminAppointmentMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCompleteAdminAppointmentMutationOptions(options));
+    }
+
 export const getListAdminReferralsUrl = (params?: ListAdminReferralsParams,) => {
   const normalizedParams = new URLSearchParams();
 
@@ -2244,6 +2514,157 @@ export const useCreateAdminAvailabilityOverride = <TError = ErrorType<void>,
       > => {
       return useMutation(getCreateAdminAvailabilityOverrideMutationOptions(options));
     }
+
+export const getDeleteAdminAvailabilityOverrideUrl = (overrideId: string,) => {
+
+
+
+
+  return `/api/admin/availability-overrides/${overrideId}`
+}
+
+/**
+ * @summary Remove a date-specific availability override
+ */
+export const deleteAdminAvailabilityOverride = async (overrideId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getDeleteAdminAvailabilityOverrideUrl(overrideId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteAdminAvailabilityOverrideMutationKey = () => ['deleteAdminAvailabilityOverride'] as const;
+
+export const getDeleteAdminAvailabilityOverrideMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminAvailabilityOverride>>, TError,DeleteAdminAvailabilityOverrideMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteAdminAvailabilityOverride>>, TError,DeleteAdminAvailabilityOverrideMutationVariables, TContext> => {
+
+const mutationKey = getDeleteAdminAvailabilityOverrideMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteAdminAvailabilityOverride>>, DeleteAdminAvailabilityOverrideMutationVariables> = (props) => {
+          const {overrideId} = props ?? {};
+
+          return  deleteAdminAvailabilityOverride(overrideId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteAdminAvailabilityOverrideMutationResult = NonNullable<Awaited<ReturnType<typeof deleteAdminAvailabilityOverride>>>
+
+    export type DeleteAdminAvailabilityOverrideMutationError = ErrorType<void>
+    export type DeleteAdminAvailabilityOverrideMutationVariables = {overrideId: string}
+
+    /**
+ * @summary Remove a date-specific availability override
+ */
+export const useDeleteAdminAvailabilityOverride = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteAdminAvailabilityOverride>>, TError,DeleteAdminAvailabilityOverrideMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteAdminAvailabilityOverride>>,
+        TError,
+        DeleteAdminAvailabilityOverrideMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteAdminAvailabilityOverrideMutationOptions(options));
+    }
+
+export const getListAdminContactMessagesUrl = () => {
+
+
+
+
+  return `/api/admin/contact-messages`
+}
+
+/**
+ * @summary View contact messages for authorized practice staff
+ */
+export const listAdminContactMessages = async ( options?: Parameters<typeof customFetch>[1]): Promise<ContactMessage[]> => {
+
+  return customFetch<ContactMessage[]>(getListAdminContactMessagesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminContactMessagesQueryKey = () => {
+    return [
+    `/api/admin/contact-messages`
+    ] as const;
+    }
+
+
+export const getListAdminContactMessagesQueryOptions = <TData = Awaited<ReturnType<typeof listAdminContactMessages>>, TError = ErrorType<void>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminContactMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminContactMessagesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminContactMessages>>> = ({ signal }) => listAdminContactMessages({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminContactMessages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminContactMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminContactMessages>>>
+export type ListAdminContactMessagesQueryError = ErrorType<void>
+
+
+/**
+ * @summary View contact messages for authorized practice staff
+ */
+
+export function useListAdminContactMessages<TData = Awaited<ReturnType<typeof listAdminContactMessages>>, TError = ErrorType<void>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminContactMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminContactMessagesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export const getUpdateAdminScheduleUrl = (locationId: string,) => {
 
