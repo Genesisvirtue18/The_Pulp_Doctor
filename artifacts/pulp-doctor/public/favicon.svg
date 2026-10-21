@@ -1,9 +1,0 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <clipPath id="icon-shape">
-      <rect width="180" height="180" rx="36" />
-    </clipPath>
-  </defs>
-  <rect width="180" height="180" rx="36" fill="#FFFFFF" />
-  <image href="/logo.jpeg" x="0" y="0" width="589" height="180" preserveAspectRatio="none" clip-path="url(#icon-shape)" />
-</svg>
